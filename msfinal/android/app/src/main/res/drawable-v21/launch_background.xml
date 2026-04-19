@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- White background with a subtle red gradient at the bottom so the dark
+     logo is clearly visible (logo PNG has mostly dark/black pixels which
+     disappear on a dark hold-screen background).
+     Shown before Flutter draws its first frame. API 21+ version. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- White top → very light red bottom gradient (brand: red + white) -->
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:startColor="#FFFFFF"
+                android:centerColor="#FFFFFF"
+                android:endColor="#FFECEC"
+                android:angle="270" />
+        </shape>
+    </item>
+    <!-- Centered company logo -->
+    <item>
+        <bitmap
+            android:src="@drawable/ms_logo"
+            android:gravity="center" />
+    </item>
+</layer-list>
