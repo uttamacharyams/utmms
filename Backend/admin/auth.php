@@ -29,13 +29,8 @@ if (!isset($pdo)) {
 
 $authHeader = '';
 if (function_exists('getallheaders')) {
-    $headers = getallheaders();
-    foreach ($headers as $k => $v) {
-        if (strtolower($k) === 'authorization') {
-            $authHeader = $v;
-            break;
-        }
-    }
+    $headers = array_change_key_case(getallheaders(), CASE_LOWER);
+    $authHeader = $headers['authorization'] ?? '';
 }
 
 // Fallback: Apache / nginx server variable

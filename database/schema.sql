@@ -459,6 +459,7 @@ CREATE TABLE IF NOT EXISTS admins (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Default admin: username=admin  password=Admin@123
+-- ⚠️  Change this password immediately after the first deployment.
 INSERT IGNORE INTO admins (id, username, email, password, name) VALUES
     (1, 'admin', 'admin@marriagestation.com',
      '$2y$10$UgRVAVqW2RmLi.x2UEcYtuBW7yxx3wGq2cGEV/JTtQtX1le40g7eG',
