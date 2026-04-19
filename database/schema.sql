@@ -81,8 +81,14 @@ CREATE TABLE IF NOT EXISTS users (
     lastName        VARCHAR(100) NOT NULL DEFAULT '',
     email           VARCHAR(255) NOT NULL,
     phone           VARCHAR(20)  DEFAULT NULL,
+    contactNo       VARCHAR(20)  DEFAULT NULL,   -- legacy mobile app field (same as phone)
     password        VARCHAR(255) NOT NULL,
     profile_picture VARCHAR(500) DEFAULT NULL,
+
+    -- Demographics
+    gender          VARCHAR(20)  DEFAULT NULL,
+    languages       VARCHAR(200) DEFAULT NULL,
+    nationality     VARCHAR(100) DEFAULT NULL,
 
     -- "verified" = ID-verified, "unverified" = default, "pending" = under review
     status          ENUM('verified','unverified','pending') NOT NULL DEFAULT 'unverified',
@@ -99,12 +105,29 @@ CREATE TABLE IF NOT EXISTS users (
     -- Onboarding step tracker (used by the app to resume incomplete signup)
     pageno          TINYINT UNSIGNED NOT NULL DEFAULT 1,
 
+    -- Social / OAuth
+    google_id       VARCHAR(255) DEFAULT NULL,
+
+    -- Push notification token
+    fcm_token       VARCHAR(500) DEFAULT NULL,
+
+    -- Document / KYC status fields (checked by check_document_status API)
+    reject_reason         VARCHAR(500) DEFAULT NULL,
+    document_upload_date  DATETIME     DEFAULT NULL,
+
+    -- Login tracking
+    last_login      DATETIME     DEFAULT NULL,
+
+    -- Legacy timestamp alias (use created_at for new code)
+    createdDate     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     UNIQUE  KEY uk_email (email),
     INDEX   idx_status   (status),
-    INDEX   idx_usertype (usertype)
+    INDEX   idx_usertype (usertype),
+    INDEX   idx_gender   (gender)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
@@ -118,7 +141,9 @@ CREATE TABLE IF NOT EXISTS userpersonaldetail (
     id              INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     userid          INT UNSIGNED NOT NULL,
     memberid        VARCHAR(50)  DEFAULT NULL,   -- human-readable member code
+    profileForId    VARCHAR(50)  DEFAULT NULL,   -- "For whom is this profile?" (self, son, daughter, etc.)
     height_name     VARCHAR(50)  DEFAULT NULL,   -- e.g. "5'6\""
+    weight_name     VARCHAR(50)  DEFAULT NULL,   -- e.g. "65 kg"
     maritalStatusId INT UNSIGNED DEFAULT NULL,
     religionId      INT UNSIGNED DEFAULT NULL,
     communityId     INT UNSIGNED DEFAULT NULL,
@@ -127,7 +152,13 @@ CREATE TABLE IF NOT EXISTS userpersonaldetail (
     aboutMe         TEXT         DEFAULT NULL,
     birthDate       DATE         DEFAULT NULL,
     Disability      VARCHAR(100) DEFAULT NULL,   -- "None" or description
+    anyDisability   TINYINT(1)   DEFAULT NULL,   -- 0 = No, 1 = Yes
+    haveSpecs       TINYINT(1)   DEFAULT NULL,   -- 0 = No, 1 = Yes (spectacles)
     bloodGroup      VARCHAR(10)  DEFAULT NULL,
+    complexion      VARCHAR(50)  DEFAULT NULL,   -- "Fair", "Wheatish", etc.
+    bodyType        VARCHAR(50)  DEFAULT NULL,   -- "Slim", "Average", etc.
+    childStatus     VARCHAR(50)  DEFAULT NULL,   -- "No Children", "Has Children", etc.
+    childLiveWith   VARCHAR(50)  DEFAULT NULL,   -- "Yes", "No" (children live with them)
 
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -144,13 +175,36 @@ CREATE TABLE IF NOT EXISTS userpersonaldetail (
 -- permanent_address
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS permanent_address (
-    id       INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    userid   INT UNSIGNED NOT NULL,
-    country  VARCHAR(100) DEFAULT NULL,
-    state    VARCHAR(100) DEFAULT NULL,
-    city     VARCHAR(100) DEFAULT NULL,
-    district VARCHAR(100) DEFAULT NULL,
-    pincode  VARCHAR(20)  DEFAULT NULL,
+    id               INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid           INT UNSIGNED NOT NULL,
+    country          VARCHAR(100) DEFAULT NULL,
+    state            VARCHAR(100) DEFAULT NULL,
+    city             VARCHAR(100) DEFAULT NULL,
+    district         VARCHAR(100) DEFAULT NULL,
+    pincode          VARCHAR(20)  DEFAULT NULL,
+    tole             VARCHAR(100) DEFAULT NULL,       -- locality / street (Nepali: टोल)
+    residentalstatus VARCHAR(100) DEFAULT NULL,        -- "Own", "Rented", etc.
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_userid (userid),
+    FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- current_address  – where the user is currently residing
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS current_address (
+    id               INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid           INT UNSIGNED NOT NULL,
+    country          VARCHAR(100) DEFAULT NULL,
+    state            VARCHAR(100) DEFAULT NULL,
+    city             VARCHAR(100) DEFAULT NULL,
+    tole             VARCHAR(100) DEFAULT NULL,
+    residentalstatus VARCHAR(100) DEFAULT NULL,
+    willingtogoabroad INT         DEFAULT 0,
+    visastatus       VARCHAR(100) DEFAULT NULL,
 
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -189,14 +243,18 @@ CREATE TABLE IF NOT EXISTS educationcareer (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
--- user_astrology
+-- user_astrologic  (astrology / horoscope details)
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS user_astrology (
-    id        INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    userid    INT UNSIGNED NOT NULL,
-    manglik   ENUM('Yes','No','Partial') DEFAULT NULL,
-    birthtime VARCHAR(20)  DEFAULT NULL,
-    birthcity VARCHAR(100) DEFAULT NULL,
+CREATE TABLE IF NOT EXISTS user_astrologic (
+    id           INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid       INT UNSIGNED NOT NULL,
+    belief       VARCHAR(50)  DEFAULT NULL,   -- "Yes" or "No" (believes in astrology)
+    manglik      ENUM('Yes','No','Partial') DEFAULT NULL,
+    birthtime    VARCHAR(20)  DEFAULT NULL,
+    birthcity    VARCHAR(100) DEFAULT NULL,
+    birthcountry VARCHAR(100) DEFAULT NULL,
+    zodiacsign   VARCHAR(50)  DEFAULT NULL,
+    birthdate    DATE         DEFAULT NULL,
 
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -206,9 +264,9 @@ CREATE TABLE IF NOT EXISTS user_astrology (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
--- userfamily
+-- user_family
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS userfamily (
+CREATE TABLE IF NOT EXISTS user_family (
     id               INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     userid           INT UNSIGNED NOT NULL,
     familytype       VARCHAR(100) DEFAULT NULL,   -- "Nuclear", "Joint", etc.
@@ -231,9 +289,25 @@ CREATE TABLE IF NOT EXISTS userfamily (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
--- userlifestyle
+-- user_family_members  – individual siblings / children entries
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS userlifestyle (
+CREATE TABLE IF NOT EXISTS user_family_members (
+    id            INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid        INT UNSIGNED NOT NULL,
+    membertype    VARCHAR(100) DEFAULT NULL,   -- "Brother", "Sister", "Son", "Daughter"
+    maritalstatus VARCHAR(100) DEFAULT NULL,
+    livestatus    VARCHAR(100) DEFAULT NULL,   -- "Alive", "Deceased"
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_ufm_userid (userid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- user_lifestyle
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_lifestyle (
     id        INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     userid    INT UNSIGNED NOT NULL,
     smoketype VARCHAR(100) DEFAULT NULL,
@@ -250,18 +324,21 @@ CREATE TABLE IF NOT EXISTS userlifestyle (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ----------------------------------------------------------------------------
--- userpartnerpreferences
+-- user_partner  (partner preferences)
 -- ----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS userpartnerpreferences (
+CREATE TABLE IF NOT EXISTS user_partner (
     id                  INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     userid              INT UNSIGNED NOT NULL,
     minage              TINYINT UNSIGNED DEFAULT NULL,
     maxage              TINYINT UNSIGNED DEFAULT NULL,
+    minheight           VARCHAR(50)  DEFAULT NULL,
+    maxheight           VARCHAR(50)  DEFAULT NULL,
     maritalstatus       VARCHAR(100) DEFAULT NULL,
     profilewithchild    TINYINT(1)   DEFAULT NULL,
     familytype          VARCHAR(100) DEFAULT NULL,
     religion            VARCHAR(100) DEFAULT NULL,
     caste               VARCHAR(100) DEFAULT NULL,
+    subcaste            VARCHAR(150) DEFAULT NULL,
     mothertoungue       VARCHAR(100) DEFAULT NULL,
     herscopeblief       VARCHAR(100) DEFAULT NULL,   -- horoscope match preference
     manglik             VARCHAR(50)  DEFAULT NULL,
@@ -320,7 +397,41 @@ CREATE TABLE IF NOT EXISTS proposals (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- 5. NOTIFICATIONS
+-- 5. LIKES
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS likes (
+    id          INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    sender_id   INT UNSIGNED NOT NULL,
+    receiver_id INT UNSIGNED NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (sender_id)   REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_like (sender_id, receiver_id),
+    INDEX idx_likes_sender   (sender_id),
+    INDEX idx_likes_receiver (receiver_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 6. BLOCKS
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS blocks (
+    id          INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    blocker_id  INT UNSIGNED NOT NULL,
+    blocked_id  INT UNSIGNED NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_block (blocker_id, blocked_id),
+    INDEX idx_blocks_blocker (blocker_id),
+    INDEX idx_blocks_blocked (blocked_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 7. NOTIFICATIONS
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -344,18 +455,58 @@ CREATE TABLE IF NOT EXISTS notifications (
     INDEX idx_type      (type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ----------------------------------------------------------------------------
+-- user_notifications  – per-user notification inbox (legacy API table)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_notifications (
+    id         INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id    INT UNSIGNED NOT NULL,
+    type       VARCHAR(50)  NOT NULL DEFAULT 'general',
+    title      VARCHAR(255) NOT NULL DEFAULT '',
+    message    TEXT         NOT NULL,
+    is_read    TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_un_user_id (user_id),
+    INDEX idx_un_is_read (user_id, is_read)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- user_notification_settings  – push/email/SMS preferences per user
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_notification_settings (
+    id            INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id       INT UNSIGNED NOT NULL,
+    push_enabled  TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+    email_enabled TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+    sms_enabled   TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_uns_user_id (user_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- =============================================================================
--- 6. DOCUMENTS / KYC
+-- 8. DOCUMENTS / KYC
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS user_documents (
-    id          INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    userid      INT UNSIGNED NOT NULL,
-    doc_type    VARCHAR(100) DEFAULT NULL,   -- e.g. "Aadhaar", "PAN", "Passport"
-    doc_url     VARCHAR(500) DEFAULT NULL,
-    status      ENUM('not_uploaded','pending','approved','rejected') NOT NULL DEFAULT 'not_uploaded',
-    reviewed_by INT UNSIGNED DEFAULT NULL,
-    reviewed_at DATETIME     DEFAULT NULL,
+    id               INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid           INT UNSIGNED NOT NULL,
+
+    -- New schema columns
+    doc_type         VARCHAR(100) DEFAULT NULL,   -- e.g. "Aadhaar", "PAN", "Passport"
+    doc_url          VARCHAR(500) DEFAULT NULL,
+    status           ENUM('not_uploaded','pending','approved','rejected') NOT NULL DEFAULT 'not_uploaded',
+    reviewed_by      INT UNSIGNED DEFAULT NULL,
+    reviewed_at      DATETIME     DEFAULT NULL,
+
+    -- Legacy API columns (used by upload_document.php)
+    documenttype     VARCHAR(100) DEFAULT NULL,
+    documentidnumber VARCHAR(100) DEFAULT NULL,
+    photo            VARCHAR(500) DEFAULT NULL,
+
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -364,9 +515,26 @@ CREATE TABLE IF NOT EXISTS user_documents (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- 7. PACKAGES / SUBSCRIPTIONS
+-- 9. PACKAGES / SUBSCRIPTIONS
 -- =============================================================================
 
+-- ----------------------------------------------------------------------------
+-- packagelist  – package catalogue (used by buypackage.php / purchase_package.php)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS packagelist (
+    id          INT           UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(150)  NOT NULL,
+    price       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    duration    INT UNSIGNED  NOT NULL DEFAULT 1,   -- months
+    description TEXT          DEFAULT NULL,
+    is_active   TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- packages  – alias / extended package table (new schema name)
+-- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS packages (
     id          INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     name        VARCHAR(150) NOT NULL,
@@ -376,6 +544,25 @@ CREATE TABLE IF NOT EXISTS packages (
     is_active   TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- user_package  – purchases (used by buypackage.php / purchase_package.php)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_package (
+    id           INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid       INT UNSIGNED NOT NULL,
+    packageid    INT UNSIGNED NOT NULL,
+    purchasedate DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expiredate   DATETIME     DEFAULT NULL,
+    paidby       VARCHAR(100) DEFAULT NULL,   -- payment method / gateway reference
+    netAmount    VARCHAR(100) DEFAULT NULL,
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_up_userid  (userid),
+    INDEX idx_up_packageid (packageid)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_subscriptions (
@@ -395,7 +582,7 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- 8. USER ACTIVITY  (app + admin panel)
+-- 10. USER ACTIVITY  (app + admin panel)
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS user_activities (
@@ -417,6 +604,15 @@ CREATE TABLE IF NOT EXISTS user_activities (
         'custom_tone_set',
         'custom_tone_removed',
         'settings_changed',
+        'like_sent',
+        'like_removed',
+        'message_sent',
+        'request_sent',
+        'request_accepted',
+        'request_rejected',
+        'call_made',
+        'photo_uploaded',
+        'package_bought',
         'other'
     ) NOT NULL DEFAULT 'other',
 
@@ -425,6 +621,8 @@ CREATE TABLE IF NOT EXISTS user_activities (
 
     -- The other user involved (e.g. whose profile was viewed, who was called)
     target_user_id INT UNSIGNED DEFAULT NULL,
+    target_name    VARCHAR(200) DEFAULT NULL,
+    user_name      VARCHAR(200) DEFAULT NULL,
 
     -- Client info for admin diagnostics
     ip_address     VARCHAR(45)  DEFAULT NULL,
@@ -440,7 +638,43 @@ CREATE TABLE IF NOT EXISTS user_activities (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- 9. ADMINS
+-- 11. AUTHENTICATION TOKENS
+-- =============================================================================
+
+-- ----------------------------------------------------------------------------
+-- user_tokens  – bearer tokens issued on login (mobile app)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_tokens (
+    id         INT          AUTO_INCREMENT PRIMARY KEY,
+    userid     INT UNSIGNED NOT NULL,
+    token      VARCHAR(255) NOT NULL,
+    expires_at DATETIME     DEFAULT NULL,
+    platform   VARCHAR(50)  DEFAULT 'mobile',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_ut_token (token),
+    INDEX idx_ut_userid (userid),
+    FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ----------------------------------------------------------------------------
+-- password_resets  – OTP codes for forgot-password flow
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS password_resets (
+    id         INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid     INT UNSIGNED NOT NULL,
+    email      VARCHAR(255) NOT NULL,
+    otp        VARCHAR(10)  NOT NULL,
+    expires_at DATETIME     NOT NULL,
+    verified   TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_pr_email (email),
+    INDEX idx_pr_userid (userid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 12. ADMINS
 -- =============================================================================
 
 CREATE TABLE IF NOT EXISTS admins (
@@ -482,7 +716,7 @@ CREATE TABLE IF NOT EXISTS admin_tokens (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
--- 10. CALL SETTINGS  (ringtones + user preferences)
+-- 13. CALL SETTINGS  (ringtones + user preferences)
 -- =============================================================================
 
 -- System ringtones managed by admin
@@ -531,6 +765,121 @@ CREATE TABLE IF NOT EXISTS user_call_settings (
     FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
     FOREIGN KEY (ringtone_id) REFERENCES ringtones(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 14. USER GALLERY  (photo gallery)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_gallery (
+    id           INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid       INT UNSIGNED NOT NULL,
+    imageurl     VARCHAR(500) NOT NULL,
+    status       ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    reject_reason VARCHAR(500) DEFAULT NULL,
+    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_ug_userid (userid),
+    INDEX idx_ug_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 15. ACCOUNT DELETION LOG
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS deletion_log (
+    id         INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    userid     INT UNSIGNED NOT NULL,
+    reason     VARCHAR(500) DEFAULT NULL,
+    feedback   TEXT         DEFAULT NULL,
+    deleted_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_dl_userid (userid)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 16. CHAT / MESSAGING  (Socket.IO real-time chat)
+-- =============================================================================
+
+-- Chat rooms between two users
+CREATE TABLE IF NOT EXISTS chat_rooms (
+    id                    VARCHAR(150) NOT NULL,
+    participants          JSON         NOT NULL,
+    participant_names     JSON         NOT NULL,
+    participant_images    JSON         NOT NULL,
+    last_message          TEXT,
+    last_message_type     VARCHAR(50)  DEFAULT 'text',
+    last_message_time     DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    last_message_sender_id VARCHAR(50) DEFAULT '',
+    created_at            DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Per-room unread message counter per user
+CREATE TABLE IF NOT EXISTS chat_unread_counts (
+    chat_room_id VARCHAR(150) NOT NULL,
+    user_id      VARCHAR(50)  NOT NULL,
+    unread_count INT          NOT NULL DEFAULT 0,
+    PRIMARY KEY (chat_room_id, user_id),
+    CONSTRAINT fk_unread_room FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Individual chat messages
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id                      BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    message_id              VARCHAR(100) NOT NULL UNIQUE,
+    chat_room_id            VARCHAR(150) NOT NULL,
+    sender_id               VARCHAR(50)  NOT NULL,
+    receiver_id             VARCHAR(50)  NOT NULL,
+    message                 TEXT,
+    message_type            VARCHAR(50)  NOT NULL DEFAULT 'text',
+    is_read                 TINYINT(1)   NOT NULL DEFAULT 0,
+    is_delivered            TINYINT(1)   NOT NULL DEFAULT 0,
+    is_deleted_for_sender   TINYINT(1)   NOT NULL DEFAULT 0,
+    is_deleted_for_receiver TINYINT(1)   NOT NULL DEFAULT 0,
+    is_edited               TINYINT(1)   NOT NULL DEFAULT 0,
+    edited_at               DATETIME,
+    replied_to              JSON,
+    created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_chat_room_time (chat_room_id, created_at),
+    INDEX idx_cm_sender      (sender_id),
+    INDEX idx_cm_receiver    (receiver_id),
+    CONSTRAINT fk_msg_room FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User online status (persisted for last-seen)
+CREATE TABLE IF NOT EXISTS user_online_status (
+    user_id             VARCHAR(50)  NOT NULL PRIMARY KEY,
+    is_online           TINYINT(1)   NOT NULL DEFAULT 0,
+    last_seen           DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    active_chat_room_id VARCHAR(150) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 17. CALL HISTORY
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS call_history (
+    id             BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    call_id        VARCHAR(100) NOT NULL UNIQUE,
+    caller_id      VARCHAR(50)  NOT NULL,
+    caller_name    VARCHAR(200) DEFAULT '',
+    caller_image   VARCHAR(500) DEFAULT '',
+    recipient_id   VARCHAR(50)  NOT NULL,
+    recipient_name VARCHAR(200) DEFAULT '',
+    recipient_image VARCHAR(500) DEFAULT '',
+    call_type      ENUM('audio','video') NOT NULL DEFAULT 'audio',
+    start_time     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    end_time       DATETIME DEFAULT NULL,
+    duration       INT      NOT NULL DEFAULT 0,
+    status         ENUM('completed','missed','declined','cancelled') NOT NULL DEFAULT 'missed',
+    initiated_by   VARCHAR(50) NOT NULL,
+    INDEX idx_ch_caller    (caller_id),
+    INDEX idx_ch_recipient (recipient_id),
+    INDEX idx_ch_start     (start_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
 -- End of schema
