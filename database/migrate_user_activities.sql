@@ -81,7 +81,41 @@ ALTER TABLE user_activities
     ) NOT NULL DEFAULT 'other';
 
 -- Step 3: Add optional columns that may be missing in older installs
-ALTER TABLE user_activities
-    ADD COLUMN IF NOT EXISTS target_name VARCHAR(200) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS user_name   VARCHAR(200) DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS device_info VARCHAR(255) DEFAULT NULL;
+-- ADD COLUMN IF NOT EXISTS requires MySQL 8.0.3+; the procedure below is
+-- compatible with MySQL 5.7+ by checking information_schema.COLUMNS first.
+DROP PROCEDURE IF EXISTS _migrate_add_ua_columns;
+
+DELIMITER //
+CREATE PROCEDURE _migrate_add_ua_columns()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'user_activities'
+          AND COLUMN_NAME  = 'target_name'
+    ) THEN
+        ALTER TABLE user_activities ADD COLUMN target_name VARCHAR(200) DEFAULT NULL;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'user_activities'
+          AND COLUMN_NAME  = 'user_name'
+    ) THEN
+        ALTER TABLE user_activities ADD COLUMN user_name VARCHAR(200) DEFAULT NULL;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME   = 'user_activities'
+          AND COLUMN_NAME  = 'device_info'
+    ) THEN
+        ALTER TABLE user_activities ADD COLUMN device_info VARCHAR(255) DEFAULT NULL;
+    END IF;
+END //
+DELIMITER ;
+
+CALL _migrate_add_ua_columns();
+DROP PROCEDURE IF EXISTS _migrate_add_ua_columns;
