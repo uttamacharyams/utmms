@@ -395,6 +395,102 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- =============================================================================
+-- 8. USER ACTIVITY  (app + admin panel)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS user_activities (
+    id             INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id        INT UNSIGNED NOT NULL,
+
+    -- The action the user performed
+    activity_type  ENUM(
+        'login',
+        'logout',
+        'profile_view',
+        'search',
+        'proposal_sent',
+        'proposal_accepted',
+        'proposal_rejected',
+        'call_initiated',
+        'call_received',
+        'call_ended',
+        'custom_tone_set',
+        'custom_tone_removed',
+        'settings_changed',
+        'other'
+    ) NOT NULL DEFAULT 'other',
+
+    -- Human-readable detail (e.g. "Viewed profile #42")
+    description    VARCHAR(500) DEFAULT NULL,
+
+    -- The other user involved (e.g. whose profile was viewed, who was called)
+    target_user_id INT UNSIGNED DEFAULT NULL,
+
+    -- Client info for admin diagnostics
+    ip_address     VARCHAR(45)  DEFAULT NULL,
+    device_info    VARCHAR(255) DEFAULT NULL,
+
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_ua_user_id       (user_id),
+    INDEX idx_ua_type          (activity_type),
+    INDEX idx_ua_created_at    (created_at),
+    INDEX idx_ua_target_user   (target_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
+-- 9. CALL SETTINGS  (ringtones + user preferences)
+-- =============================================================================
+
+-- System ringtones managed by admin
+CREATE TABLE IF NOT EXISTS ringtones (
+    id          INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(150) NOT NULL,
+    file_url    VARCHAR(500) NOT NULL,
+
+    -- Only one ringtone should be the system default
+    is_default  TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+
+    -- Soft-delete: admin can deactivate without losing the record
+    is_active   TINYINT(1) UNSIGNED NOT NULL DEFAULT 1,
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_rt_is_active  (is_active),
+    INDEX idx_rt_is_default (is_default)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Seed: one built-in default ringtone (adjust file_url as needed)
+INSERT IGNORE INTO ringtones (id, name, file_url, is_default, is_active) VALUES
+    (1, 'Default Ringtone', '/uploads/ringtones/default.mp3', 1, 1);
+
+-- Per-user call settings (one row per user)
+CREATE TABLE IF NOT EXISTS user_call_settings (
+    id                INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id           INT UNSIGNED NOT NULL,
+
+    -- System ringtone chosen by the user (NULL = use the system default)
+    ringtone_id       INT UNSIGNED DEFAULT NULL,
+
+    -- Custom tone uploaded by the user
+    custom_tone_url   VARCHAR(500) DEFAULT NULL,
+    custom_tone_name  VARCHAR(255) DEFAULT NULL,
+
+    -- 1 = play custom_tone_url when this user is called
+    -- 0 = play the ringtone_id (or system default if ringtone_id is NULL)
+    is_custom         TINYINT(1) UNSIGNED NOT NULL DEFAULT 0,
+
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_ucs_user_id (user_id),
+    FOREIGN KEY (user_id)     REFERENCES users(id)     ON DELETE CASCADE,
+    FOREIGN KEY (ringtone_id) REFERENCES ringtones(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- =============================================================================
 -- End of schema
 -- =============================================================================
 
