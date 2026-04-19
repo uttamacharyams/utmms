@@ -18,7 +18,10 @@ class ProposalService {
 
   /// Fetch proposals for [userId].
   ///
-  /// [type] must be one of: `"received"`, `"sent"`, `"accepted"`.
+  /// [type] must be one of: `"received"`, `"sent"`, `"history"`.
+  /// - `"received"` — pending requests sent to this user
+  /// - `"sent"`     — pending requests sent by this user
+  /// - `"history"`  — all accepted and rejected requests involving this user
   Future<ApiResponse<List<ProposalModel>>> fetchProposals({
     required String userId,
     required String type,
@@ -40,7 +43,7 @@ class ProposalService {
         return ApiResponse.error(json['message'] ?? 'Unknown error');
       }
 
-      final List<ProposalModel> proposals = (json['data'] as List)
+      final proposals = (json['data'] as List)
           .map((e) => ProposalModel.fromJson(e as Map<String, dynamic>))
           .toList();
 
@@ -57,6 +60,7 @@ class ProposalService {
   /// Send a new connection request from [senderId] to [receiverId].
   ///
   /// [requestType] must be one of: `"Photo"`, `"Profile"`, `"Chat"`.
+  /// Returns the `proposal_id` of the created (or updated) proposal.
   Future<ApiResponse<String>> sendRequest({
     required String senderId,
     required String receiverId,
@@ -90,6 +94,7 @@ class ProposalService {
   // Accept proposal
   // ---------------------------------------------------------------------------
 
+  /// Accept a pending proposal. Only the receiver may accept.
   Future<ApiResponse<bool>> acceptProposal({
     required String proposalId,
     required String userId,
@@ -116,6 +121,7 @@ class ProposalService {
   // Reject proposal
   // ---------------------------------------------------------------------------
 
+  /// Reject a pending proposal. Both the sender and receiver may reject.
   Future<ApiResponse<bool>> rejectProposal({
     required String proposalId,
     required String userId,
@@ -142,6 +148,8 @@ class ProposalService {
   // Delete proposal
   // ---------------------------------------------------------------------------
 
+  /// Delete a pending or rejected proposal.
+  /// Only the sender or receiver of the proposal may delete it.
   Future<ApiResponse<bool>> deleteProposal({
     required String proposalId,
     required String userId,

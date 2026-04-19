@@ -1,53 +1,76 @@
 <?php
-header("Content-Type: application/json");
+/**
+ * delete_proposal.php
+ *
+ * Delete a pending or rejected proposal.
+ * Only the sender or receiver of the proposal may delete it.
+ * Accepted proposals cannot be deleted (they are part of the history).
+ *
+ * POST body (JSON or form-encoded):
+ *   proposal_id (int) – ID of the proposal to delete
+ *   user_id     (int) – ID of the currently logged-in user
+ */
 
-// DB CONNECTION
-$conn = new mysqli("localhost", "ms", "ms", "ms");
-if ($conn->connect_error) {
-    echo json_encode(["success" => false, "message" => "DB connection failed"]);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit;
 }
 
-// REQUIRED PARAMS — support both JSON and form-encoded bodies
+require_once __DIR__ . '/db_config.php';
+
+// --------------------------------------------------------------------------
+// Input
+// --------------------------------------------------------------------------
+
 $input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
+if (empty($input)) {
     $input = $_POST;
 }
 
-if (!isset($input['user_id']) || !isset($input['proposal_id'])) {
-    echo json_encode(["success" => false, "message" => "Missing parameters"]);
+if (empty($input['proposal_id']) || empty($input['user_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Missing parameters: proposal_id and user_id are required']);
     exit;
 }
 
-$user_id     = intval($input['user_id']);
-$proposal_id = intval($input['proposal_id']);
+$proposalId = (int) $input['proposal_id'];
+$userId     = (int) $input['user_id'];
 
-// Verify proposal belongs to user and is in a deletable state
-$checkStmt = $conn->prepare(
-    "SELECT id FROM proposals
-     WHERE id = ?
-       AND (sender_id = ? OR receiver_id = ?)
-       AND status IN ('pending', 'rejected')
-     LIMIT 1"
-);
-$checkStmt->bind_param("iii", $proposal_id, $user_id, $user_id);
-$checkStmt->execute();
-$checkResult = $checkStmt->get_result();
+// --------------------------------------------------------------------------
+// Delete logic
+// --------------------------------------------------------------------------
 
-if ($checkResult->num_rows === 0) {
-    echo json_encode(["success" => false, "message" => "Proposal not found or cannot be deleted"]);
-    exit;
+try {
+    // Verify the proposal exists, belongs to this user, and is in a deletable state
+    $checkStmt = $pdo->prepare("
+        SELECT id FROM proposals
+        WHERE  id          = ?
+          AND  (sender_id = ? OR receiver_id = ?)
+          AND  status IN ('pending', 'rejected')
+        LIMIT 1
+    ");
+    $checkStmt->execute([$proposalId, $userId, $userId]);
+
+    if (!$checkStmt->fetch()) {
+        echo json_encode(['success' => false, 'message' => 'Proposal not found or cannot be deleted']);
+        exit;
+    }
+
+    $deleteStmt = $pdo->prepare("DELETE FROM proposals WHERE id = ?");
+    $deleteStmt->execute([$proposalId]);
+
+    echo json_encode(['success' => true, 'message' => 'Proposal deleted successfully']);
+
+} catch (PDOException $e) {
+    error_log('delete_proposal error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Server error. Please try again.']);
 }
 
-// Delete proposal
-$deleteStmt = $conn->prepare("DELETE FROM proposals WHERE id = ?");
-$deleteStmt->bind_param("i", $proposal_id);
-
-if ($deleteStmt->execute()) {
-    echo json_encode(["success" => true, "message" => "Proposal deleted successfully"]);
-} else {
-    echo json_encode(["success" => false, "message" => "Failed to delete proposal"]);
-}
-
-$conn->close();
-?>

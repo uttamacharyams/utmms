@@ -1,128 +1,128 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
+/**
+ * send_request.php
+ *
+ * Send (or re-send) a connection request.
+ *
+ * POST body (JSON or form-encoded):
+ *   sender_id    / myid    (int)    – ID of the requesting user
+ *   receiver_id  / userid  (int)    – ID of the target user
+ *   request_type           (string) – "Photo" | "Profile" | "Chat"
+ *
+ * If a request of the same type already exists between these two users,
+ * it is reset to "pending" and updated_at is refreshed.
+ */
 
-// Database configuration
-$dbHost = "127.0.0.1";
-$dbName = "ms";
-$dbUser = "ms";
-$dbPass = "ms";
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
+require_once __DIR__ . '/db_config.php';
+
+// --------------------------------------------------------------------------
+// Input parsing — accept JSON body or form-encoded POST
+// --------------------------------------------------------------------------
+
+$input = json_decode(file_get_contents('php://input'), true);
+if (empty($input)) {
+    $input = $_POST;
+}
+
+// Support both naming conventions (myid/userid from older clients)
+$sender_id    = isset($input['sender_id'])   ? (int) $input['sender_id']   :
+               (isset($input['myid'])        ? (int) $input['myid']        : 0);
+$receiver_id  = isset($input['receiver_id']) ? (int) $input['receiver_id'] :
+               (isset($input['userid'])      ? (int) $input['userid']      : 0);
+$request_type = isset($input['request_type']) ? trim($input['request_type']) : 'Photo';
+
+// --------------------------------------------------------------------------
+// Validation
+// --------------------------------------------------------------------------
+
+$valid_types = ['Photo', 'Profile', 'Chat'];
+
+if ($sender_id <= 0 || $receiver_id <= 0) {
+    echo json_encode(['success' => false, 'message' => 'sender_id and receiver_id are required']);
+    exit;
+}
+
+if (!in_array($request_type, $valid_types, true)) {
+    echo json_encode(['success' => false, 'message' => 'Invalid request_type. Must be one of: Photo, Profile, Chat']);
+    exit;
+}
+
+if ($sender_id === $receiver_id) {
+    echo json_encode(['success' => false, 'message' => 'You cannot send a request to yourself']);
+    exit;
+}
+
+// --------------------------------------------------------------------------
+// Upsert logic
+// --------------------------------------------------------------------------
 
 try {
-    $pdo = new PDO(
-        "mysql:host=$dbHost;dbname=$dbName;charset=utf8",
-        $dbUser,
-        $dbPass
-    );
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // Support JSON + form data
-    $input = json_decode(file_get_contents('php://input'), true);
-    if (!$input) {
-        $input = $_POST;
-    }
-
-    // Map keys (support both naming conventions)
-    $sender_id = isset($input['sender_id'])
-        ? intval($input['sender_id'])
-        : (isset($input['myid']) ? intval($input['myid']) : null);
-
-    $receiver_id = isset($input['receiver_id'])
-        ? intval($input['receiver_id'])
-        : (isset($input['userid']) ? intval($input['userid']) : null);
-
-    $request_type = isset($input['request_type'])
-        ? $input['request_type']
-        : 'Photo';
-
-    // Validation
-    $valid_types = ['Photo', 'Profile', 'Chat'];
-
-    if (!$sender_id || !$receiver_id || !in_array($request_type, $valid_types)) {
-        echo json_encode([
-            "success" => false,
-            "message" => "Invalid input. sender_id, receiver_id, and valid request_type required."
-        ]);
-        exit;
-    }
-
-    // Prevent self-request
-    if ($sender_id == $receiver_id) {
-        echo json_encode([
-            "success" => false,
-            "message" => "You cannot send a request to yourself"
-        ]);
-        exit;
-    }
-
-    $status = 'pending';
-    $created_at = date('Y-m-d H:i:s');
-
-    // Check if same type already exists
+    // Check for an existing request of the same type in either direction
     $checkStmt = $pdo->prepare("
         SELECT id
-        FROM proposals
-        WHERE sender_id = :sender_id
-        AND receiver_id = :receiver_id
-        AND request_type = :request_type
+        FROM   proposals
+        WHERE  sender_id    = :sender_id
+          AND  receiver_id  = :receiver_id
+          AND  request_type = :request_type
         LIMIT 1
     ");
-
     $checkStmt->execute([
         ':sender_id'    => $sender_id,
         ':receiver_id'  => $receiver_id,
-        ':request_type' => $request_type
+        ':request_type' => $request_type,
     ]);
+    $existing = $checkStmt->fetch();
 
-    if ($checkStmt->rowCount() > 0) {
-        // Update existing proposal
-        $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
-
+    if ($existing) {
+        // Re-send: reset status to pending and refresh timestamps
         $updateStmt = $pdo->prepare("
             UPDATE proposals
-            SET status = :status, created_at = :created_at
-            WHERE id = :id
+            SET    status     = 'pending',
+                   updated_at = NOW()
+            WHERE  id = :id
         ");
-
-        $updateStmt->execute([
-            ':status'     => $status,
-            ':created_at' => $created_at,
-            ':id'         => $row['id']
-        ]);
+        $updateStmt->execute([':id' => $existing['id']]);
 
         echo json_encode([
-            "success"     => true,
-            "message"     => "",
-            "proposal_id" => $row['id']
+            'success'     => true,
+            'message'     => '',
+            'proposal_id' => (string) $existing['id'],
         ]);
-
     } else {
-        // Insert new proposal
+        // New request
         $insertStmt = $pdo->prepare("
-            INSERT INTO proposals
-            (sender_id, receiver_id, request_type, status, created_at)
-            VALUES
-            (:sender_id, :receiver_id, :request_type, :status, :created_at)
+            INSERT INTO proposals (sender_id, receiver_id, request_type, status, created_at, updated_at)
+            VALUES (:sender_id, :receiver_id, :request_type, 'pending', NOW(), NOW())
         ");
-
         $insertStmt->execute([
             ':sender_id'    => $sender_id,
             ':receiver_id'  => $receiver_id,
             ':request_type' => $request_type,
-            ':status'       => $status,
-            ':created_at'   => $created_at
         ]);
 
         echo json_encode([
-            "success"     => true,
-            "message"     => "",
-            "proposal_id" => $pdo->lastInsertId()
+            'success'     => true,
+            'message'     => '',
+            'proposal_id' => (string) $pdo->lastInsertId(),
         ]);
     }
 
 } catch (PDOException $e) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Database error: " . $e->getMessage()
-    ]);
+    error_log('send_request error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Server error. Please try again.']);
 }
-?>
+

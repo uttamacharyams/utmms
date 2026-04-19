@@ -1,82 +1,92 @@
 <?php
-header("Content-Type: application/json");
+/**
+ * accept_proposal.php
+ *
+ * Accept a pending proposal. Only the receiver may accept.
+ *
+ * POST body (JSON or form-encoded):
+ *   proposal_id (int) – ID of the proposal to accept
+ *   user_id     (int) – ID of the currently logged-in user (must be the receiver)
+ */
 
-// DB CONNECTION
-$conn = new mysqli("localhost", "ms", "ms", "ms");
-if ($conn->connect_error) {
-    echo json_encode(["success" => false, "message" => "DB connection failed"]);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+error_reporting(E_ALL);
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
     exit;
 }
 
-// GET POST DATA — support both JSON and form-encoded bodies
+require_once __DIR__ . '/db_config.php';
+
+// --------------------------------------------------------------------------
+// Input
+// --------------------------------------------------------------------------
+
 $input = json_decode(file_get_contents('php://input'), true);
-if (!$input) {
+if (empty($input)) {
     $input = $_POST;
 }
 
-if (!isset($input['proposal_id'], $input['user_id'])) {
-    echo json_encode(["success" => false, "message" => "Missing parameters"]);
+if (empty($input['proposal_id']) || empty($input['user_id'])) {
+    echo json_encode(['success' => false, 'message' => 'Missing parameters: proposal_id and user_id are required']);
     exit;
 }
 
 $proposalId = (int) $input['proposal_id'];
 $userId     = (int) $input['user_id'];
 
+// --------------------------------------------------------------------------
+// Accept logic
+// --------------------------------------------------------------------------
+
 try {
-    // Verify user can accept this proposal
-    $checkSql = "SELECT receiver_id FROM proposals WHERE id = ? AND status = 'pending'";
-    $checkStmt = $conn->prepare($checkSql);
-    $checkStmt->bind_param("i", $proposalId);
-    $checkStmt->execute();
-    $checkResult = $checkStmt->get_result();
+    // Fetch the proposal in one query — get both sender and receiver
+    $stmt = $pdo->prepare("
+        SELECT id, sender_id, receiver_id
+        FROM   proposals
+        WHERE  id = ? AND status = 'pending'
+        LIMIT 1
+    ");
+    $stmt->execute([$proposalId]);
+    $proposal = $stmt->fetch();
 
-    if ($checkResult->num_rows === 0) {
-        echo json_encode(["success" => false, "message" => "Proposal not found or already processed"]);
+    if (!$proposal) {
+        echo json_encode(['success' => false, 'message' => 'Proposal not found or already processed']);
         exit;
     }
 
-    $proposal = $checkResult->fetch_assoc();
-    if ($proposal['receiver_id'] != $userId) {
-        echo json_encode(["success" => false, "message" => "You are not authorized to accept this proposal"]);
+    if ((int) $proposal['receiver_id'] !== $userId) {
+        echo json_encode(['success' => false, 'message' => 'You are not authorized to accept this proposal']);
         exit;
     }
 
-    // Update proposal status
-    $updateSql = "UPDATE proposals SET status = 'accepted', updated_at = NOW() WHERE id = ?";
-    $updateStmt = $conn->prepare($updateSql);
-    $updateStmt->bind_param("i", $proposalId);
+    // Update status
+    $update = $pdo->prepare("UPDATE proposals SET status = 'accepted', updated_at = NOW() WHERE id = ?");
+    $update->execute([$proposalId]);
 
-    if ($updateStmt->execute()) {
-        // Get sender ID to create a notification
-        $senderSql = "SELECT sender_id FROM proposals WHERE id = ?";
-        $senderStmt = $conn->prepare($senderSql);
-        $senderStmt->bind_param("i", $proposalId);
-        $senderStmt->execute();
-        $senderResult = $senderStmt->get_result();
-
-        if ($senderResult->num_rows > 0) {
-            $senderData = $senderResult->fetch_assoc();
-            $senderId   = $senderData['sender_id'];
-
-            try {
-                $notifSql = "INSERT INTO notifications (user_id, title, message, type, reference_id, created_at)
-                             VALUES (?, 'Proposal Accepted', 'Your proposal has been accepted', 'proposal', ?, NOW())";
-                $notifStmt = $conn->prepare($notifSql);
-                $notifStmt->bind_param("ii", $senderId, $proposalId);
-                $notifStmt->execute();
-            } catch (Exception $e) {
-                // Continue even if notifications table does not exist
-            }
-        }
-
-        echo json_encode(["success" => true, "message" => "Proposal accepted successfully"]);
-    } else {
-        echo json_encode(["success" => false, "message" => "Failed to accept proposal"]);
+    // Notify the sender (silently skip if notifications table doesn't exist)
+    try {
+        $notify = $pdo->prepare("
+            INSERT INTO notifications (user_id, title, message, type, reference_id, created_at)
+            VALUES (?, 'Proposal Accepted', 'Your proposal has been accepted', 'proposal', ?, NOW())
+        ");
+        $notify->execute([$proposal['sender_id'], $proposalId]);
+    } catch (PDOException $e) {
+        // Notifications table may not exist – non-fatal
+        error_log('accept_proposal notification error: ' . $e->getMessage());
     }
 
-} catch (Exception $e) {
-    echo json_encode(["success" => false, "message" => "Server error: " . $e->getMessage()]);
+    echo json_encode(['success' => true, 'message' => 'Proposal accepted successfully']);
+
+} catch (PDOException $e) {
+    error_log('accept_proposal error: ' . $e->getMessage());
+    echo json_encode(['success' => false, 'message' => 'Server error. Please try again.']);
 }
 
-$conn->close();
-?>

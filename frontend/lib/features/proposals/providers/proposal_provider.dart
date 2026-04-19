@@ -7,7 +7,7 @@ import '../services/proposal_service.dart';
 /// Holds three separate lists:
 /// - [received]  — pending proposals sent TO the current user
 /// - [sent]      — pending proposals sent BY the current user
-/// - [accepted]  — accepted/rejected proposals for the current user
+/// - [history]   — accepted and rejected proposals for the current user
 ///
 /// All network calls go through [ProposalService] which returns
 /// [ApiResponse] objects, keeping error handling consistent.
@@ -26,7 +26,7 @@ class ProposalProvider extends ChangeNotifier {
 
   List<ProposalModel> _received = [];
   List<ProposalModel> _sent     = [];
-  List<ProposalModel> _accepted = [];
+  List<ProposalModel> _history  = [];
 
   // -------------------------------------------------------------------------
   // Getters
@@ -37,31 +37,31 @@ class ProposalProvider extends ChangeNotifier {
 
   List<ProposalModel> get received => List.unmodifiable(_received);
   List<ProposalModel> get sent     => List.unmodifiable(_sent);
-  List<ProposalModel> get accepted => List.unmodifiable(_accepted);
+
+  /// Accepted and rejected proposals (request history).
+  List<ProposalModel> get history  => List.unmodifiable(_history);
 
   // -------------------------------------------------------------------------
   // Load all lists
   // -------------------------------------------------------------------------
 
   Future<void> loadAll(String userId) async {
-    _setLoading(true);
-    _clearError();
+    _isLoading = true;
+    _error = null;
+    notifyListeners(); // Immediately show loading spinner in the UI
 
     await Future.wait([
       _loadList(userId, 'received'),
       _loadList(userId, 'sent'),
-      _loadList(userId, 'accepted'),
+      _loadList(userId, 'history'),
     ]);
 
-    _setLoading(false);
+    _isLoading = false;
     notifyListeners();
   }
 
   Future<void> _loadList(String userId, String type) async {
-    final response = await _service.fetchProposals(
-      userId: userId,
-      type: type,
-    );
+    final response = await _service.fetchProposals(userId: userId, type: type);
 
     if (response.isSuccess && response.data != null) {
       switch (type) {
@@ -71,14 +71,14 @@ class ProposalProvider extends ChangeNotifier {
         case 'sent':
           _sent = response.data!;
           break;
-        case 'accepted':
-          _accepted = response.data!;
+        case 'history':
+          _history = response.data!;
           break;
       }
     } else {
-      _setError(response.error ?? 'Failed to load $type proposals');
+      _error = response.error ?? 'Failed to load $type proposals';
     }
-    // notifyListeners is called once in loadAll() after all lists are loaded
+    // notifyListeners() is called once in loadAll() after all lists have loaded
   }
 
   // -------------------------------------------------------------------------
@@ -97,7 +97,7 @@ class ProposalProvider extends ChangeNotifier {
     );
 
     if (!response.isSuccess) {
-      _setError(response.error ?? 'Failed to send request');
+      _error = response.error ?? 'Failed to send request';
       notifyListeners();
     }
     return response.isSuccess;
@@ -114,11 +114,10 @@ class ProposalProvider extends ChangeNotifier {
 
     if (response.isSuccess) {
       _received.removeWhere((p) => p.proposalId == proposalId);
-      notifyListeners();
     } else {
-      _setError(response.error ?? 'Failed to accept proposal');
-      notifyListeners();
+      _error = response.error ?? 'Failed to accept proposal';
     }
+    notifyListeners();
     return response.isSuccess;
   }
 
@@ -133,11 +132,10 @@ class ProposalProvider extends ChangeNotifier {
 
     if (response.isSuccess) {
       _received.removeWhere((p) => p.proposalId == proposalId);
-      notifyListeners();
     } else {
-      _setError(response.error ?? 'Failed to reject proposal');
-      notifyListeners();
+      _error = response.error ?? 'Failed to reject proposal';
     }
+    notifyListeners();
     return response.isSuccess;
   }
 
@@ -152,31 +150,21 @@ class ProposalProvider extends ChangeNotifier {
 
     if (response.isSuccess) {
       _sent.removeWhere((p) => p.proposalId == proposalId);
-      notifyListeners();
     } else {
-      _setError(response.error ?? 'Failed to delete proposal');
-      notifyListeners();
+      _error = response.error ?? 'Failed to delete proposal';
     }
+    notifyListeners();
     return response.isSuccess;
   }
 
   // -------------------------------------------------------------------------
-  // Helpers
+  // Error management
   // -------------------------------------------------------------------------
 
-  void _setLoading(bool value) {
-    _isLoading = value;
-    // Caller is responsible for calling notifyListeners() after state changes
-  }
-
-  void _setError(String message) {
-    _error = message;
-    // Caller is responsible for calling notifyListeners() after state changes
-  }
-
-  void _clearError() {
+  /// Clear the current error and notify listeners so the UI can update.
+  void clearError() {
     _error = null;
+    notifyListeners();
   }
-
-  void clearError() => _clearError();
 }
+
