@@ -345,174 +345,152 @@ class RegistrationStepContainer extends StatelessWidget {
           child: GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
             behavior: HitTestBehavior.translucent,
-            child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
+            child: SingleChildScrollView(
               controller: scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
               physics: scrollPhysics ?? const ClampingScrollPhysics(),
-              // Scrollable content only — no keyboard spacer or buttons here.
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                child: child,
-              ),
-            ),
-          ),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    child,
 
-            // -----------------------------------------------------------
-            // Sticky action-button footer.
-            // Lives OUTSIDE the scroll area so it is always visible.
-            // When the software keyboard is open, viewInsets.bottom > 0 and
-            // the extra bottom padding lifts the footer above the keyboard
-            // (Scaffold has resizeToAvoidBottomInset: false on every step).
-            // -----------------------------------------------------------
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  20,
-                  20,
-                  20,
-                  20 + MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.shadowLight,
-                      blurRadius: 12,
-                      offset: const Offset(0, -4),
-                    ),
-                  ],
-                ),
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    children: [
-                      // Back button (only rendered when [onBack] is provided)
-                      if (onBack != null) ...[
-                        Expanded(
-                          flex: 1,
-                          child: OutlinedButton(
-                            onPressed: isLoading
-                                ? null
-                                : () {
-                                    FocusScope.of(context).unfocus();
-                                    _handleRegistrationBack(
-                                      context,
-                                      model,
-                                      onStepBack: onStepBack,
-                                    );
-                                  },
-                            style: OutlinedButton.styleFrom(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 18),
-                              side: const BorderSide(
-                                color: AppColors.border,
-                                width: 1.5,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Back',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
+                    const SizedBox(height: 24),
 
-                      // Continue button
-                      Expanded(
-                        flex: 2,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: canContinue
-                                ? AppColors.primaryGradient
-                                : const LinearGradient(
-                                    colors: [
-                                      AppColors.borderLight,
-                                      AppColors.border,
-                                    ],
+                    // Action buttons — scroll with content so they are never
+                    // overlaid above the keyboard.
+                    SafeArea(
+                      top: false,
+                      child: Row(
+                        children: [
+                          // Back button (only rendered when [onBack] is provided)
+                          if (onBack != null) ...[
+                            Expanded(
+                              flex: 1,
+                              child: OutlinedButton(
+                                onPressed: isLoading
+                                    ? null
+                                    : () {
+                                        FocusScope.of(context).unfocus();
+                                        _handleRegistrationBack(
+                                          context,
+                                          model,
+                                          onStepBack: onStepBack,
+                                        );
+                                      },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 18),
+                                  side: const BorderSide(
+                                    color: AppColors.border,
+                                    width: 1.5,
                                   ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: canContinue
-                                ? [
-                                    BoxShadow(
-                                      color: AppColors.primary
-                                          .withOpacity(0.3),
-                                      blurRadius: 16,
-                                      offset: const Offset(0, 6),
-                                    ),
-                                  ]
-                                : [],
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: isLoading
-                                  ? null
-                                  : () {
-                                      FocusScope.of(context).unfocus();
-                                      onContinue?.call();
-                                    },
-                              borderRadius: BorderRadius.circular(16),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 18),
-                                child: Center(
-                                  child: isLoading
-                                      ? const SizedBox(
-                                          height: 24,
-                                          width: 24,
-                                          child: CircularProgressIndicator(
-                                            color: AppColors.white,
-                                            strokeWidth: 2.5,
-                                          ),
-                                        )
-                                      : Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              continueText,
-                                              style: TextStyle(
-                                                color: canContinue
-                                                    ? AppColors.white
-                                                    : AppColors
-                                                        .textSecondary,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.3,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Icon(
-                                              Icons.arrow_forward_ios,
-                                              size: 16,
-                                              color: canContinue
-                                                  ? AppColors.white
-                                                  : AppColors.textSecondary,
-                                            ),
-                                          ],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                child: const Text(
+                                  'Back',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                          ],
+
+                          // Continue button
+                          Expanded(
+                            flex: 2,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: canContinue
+                                    ? AppColors.primaryGradient
+                                    : const LinearGradient(
+                                        colors: [
+                                          AppColors.borderLight,
+                                          AppColors.border,
+                                        ],
+                                      ),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: canContinue
+                                    ? [
+                                        BoxShadow(
+                                          color: AppColors.primary
+                                              .withOpacity(0.3),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 6),
                                         ),
+                                      ]
+                                    : [],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: isLoading
+                                      ? null
+                                      : () {
+                                          FocusScope.of(context).unfocus();
+                                          onContinue?.call();
+                                        },
+                                  borderRadius: BorderRadius.circular(16),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 18),
+                                    child: Center(
+                                      child: isLoading
+                                          ? const SizedBox(
+                                              height: 24,
+                                              width: 24,
+                                              child: CircularProgressIndicator(
+                                                color: AppColors.white,
+                                                strokeWidth: 2.5,
+                                              ),
+                                            )
+                                          : Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  continueText,
+                                                  style: TextStyle(
+                                                    color: canContinue
+                                                        ? AppColors.white
+                                                        : AppColors
+                                                            .textSecondary,
+                                                    fontSize: 16,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    letterSpacing: 0.3,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 8),
+                                                Icon(
+                                                  Icons.arrow_forward_ios,
+                                                  size: 16,
+                                                  color: canContinue
+                                                      ? AppColors.white
+                                                      : AppColors
+                                                          .textSecondary,
+                                                ),
+                                              ],
+                                            ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
           ),
         );
       },

@@ -388,7 +388,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: _isLoading
           ? _buildLoadingScreen()
           : _buildContent(),
