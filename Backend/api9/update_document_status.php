@@ -16,17 +16,16 @@ define('DB_NAME', 'ms');
 define('DB_USER', 'ms');
 define('DB_PASS', 'ms');
 
-$input = json_decode(file_get_contents("php://input"), true);
-
-$userId = $input['user_id'] ?? null;
-$action = $input['action'] ?? null;
+$input       = json_decode(file_get_contents("php://input"), true);
+$documentId  = isset($input['document_id']) ? intval($input['document_id']) : null;
+$action      = $input['action'] ?? null;
 $rejectReason = trim($input['reject_reason'] ?? '');
 
-if (!$userId || !$action) {
+if (!$documentId || !$action) {
     http_response_code(422);
     echo json_encode([
         'success' => false,
-        'message' => 'user_id and action are required'
+        'message' => 'document_id and action are required'
     ]);
     exit;
 }
@@ -39,15 +38,15 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
-    // Check user exists
-    $check = $pdo->prepare("SELECT id FROM users WHERE id = ?");
-    $check->execute([$userId]);
+    // Check document exists
+    $check = $pdo->prepare("SELECT id FROM user_documents WHERE id = ?");
+    $check->execute([$documentId]);
 
     if (!$check->fetch()) {
         http_response_code(404);
         echo json_encode([
             'success' => false,
-            'message' => 'User not found'
+            'message' => 'Document not found'
         ]);
         exit;
     }
@@ -56,18 +55,18 @@ try {
     if ($action === 'approve') {
 
         $stmt = $pdo->prepare("
-            UPDATE users
-            SET 
-                status = 'approved',
-                isVerified = 1,
-                reject_reason = NULL
+            UPDATE user_documents
+            SET
+                status        = 'approved',
+                reject_reason = NULL,
+                reviewed_at   = NOW()
             WHERE id = ?
         ");
-        $stmt->execute([$userId]);
+        $stmt->execute([$documentId]);
 
         echo json_encode([
             'success' => true,
-            'message' => 'User approved and verified successfully'
+            'message' => 'Document approved successfully'
         ]);
         exit;
     }
@@ -85,18 +84,18 @@ try {
         }
 
         $stmt = $pdo->prepare("
-            UPDATE users
-            SET 
-                status = 'rejected',
-                isVerified = 0,
-                reject_reason = ?
+            UPDATE user_documents
+            SET
+                status        = 'rejected',
+                reject_reason = ?,
+                reviewed_at   = NOW()
             WHERE id = ?
         ");
-        $stmt->execute([$rejectReason, $userId]);
+        $stmt->execute([$rejectReason, $documentId]);
 
         echo json_encode([
             'success' => true,
-            'message' => 'User rejected successfully'
+            'message' => 'Document rejected successfully'
         ]);
         exit;
     }

@@ -4,12 +4,13 @@ class Document {
   final String firstName;
   final String lastName;
   final String gender;
-  final String status;
   final int isVerified;
   final int documentId;
   final String documentType;
   final String documentIdNumber;
   final String photo;
+  final String status;
+  final String rejectReason;
 
   Document({
     required this.userId,
@@ -17,12 +18,13 @@ class Document {
     required this.firstName,
     required this.lastName,
     required this.gender,
-    required this.status,
     required this.isVerified,
     required this.documentId,
     required this.documentType,
     required this.documentIdNumber,
     required this.photo,
+    required this.status,
+    required this.rejectReason,
   });
 
   factory Document.fromJson(Map<String, dynamic> json) {
@@ -32,12 +34,13 @@ class Document {
       firstName: json['firstName'] ?? '',
       lastName: json['lastName'] ?? '',
       gender: json['gender'] ?? '',
-      status: json['status'] ?? '',
       isVerified: json['isVerified'] ?? 0,
       documentId: json['document_id'] ?? 0,
       documentType: json['documenttype'] ?? '',
       documentIdNumber: json['documentidnumber'] ?? '',
       photo: json['photo'] ?? '',
+      status: json['status'] ?? 'not_uploaded',
+      rejectReason: json['reject_reason'] ?? '',
     );
   }
 

@@ -2,26 +2,31 @@
 header("Content-Type: application/json");
 
 // ---------------- DB CONNECTION ----------------
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
+$host   = "localhost";
+$dbuser = "ms";
+$pass   = "ms";
 $dbname = "ms";
 
-$conn = new mysqli($host, $user, $pass, $dbname);
+$conn = new mysqli($host, $dbuser, $pass, $dbname);
 if ($conn->connect_error) {
     echo json_encode(["status" => "error", "message" => "DB connect failed"]);
     exit;
 }
 
-// ---------------- REQUIRED PARAM ----------------
-$userid = isset($_POST['userid']) ? intval($_POST['userid']) : 0;
+// ---------------- REQUIRED PARAMS ----------------
+$userid       = isset($_POST['userid'])       ? intval($_POST['userid'])       : 0;
+$documenttype = isset($_POST['documenttype']) ? trim($_POST['documenttype'])   : '';
+
 if ($userid <= 0) {
     echo json_encode(["status" => "error", "message" => "Invalid userid"]);
     exit;
 }
+if ($documenttype === '') {
+    echo json_encode(["status" => "error", "message" => "documenttype is required"]);
+    exit;
+}
 
 // ---------------- OPTIONAL PARAMS ----------------
-$documenttype     = $_POST['documenttype'] ?? null;
 $documentidnumber = $_POST['documentidnumber'] ?? null;
 
 // ---------------- FILE UPLOAD ----------------
@@ -34,7 +39,7 @@ if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
         mkdir($folder, 0777, true);
     }
 
-    $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
+    $ext      = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
     $filename = "doc_" . $userid . "_" . time() . "." . $ext;
     $filepath = $folder . $filename;
 
@@ -43,49 +48,27 @@ if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
     }
 }
 
-// ---------------- CHECK IF RECORD EXISTS ----------------
-$check = $conn->prepare("SELECT id FROM user_documents WHERE userid = ?");
-$check->bind_param("i", $userid);
-$check->execute();
-$check->store_result();
+// ---------------- UPSERT: one row per (userid, documenttype) ----------------
+// On duplicate key reset status to pending and clear reject_reason so the
+// admin re-reviews the freshly uploaded document.
+$sql = "INSERT INTO user_documents
+            (userid, documenttype, documentidnumber, photo, status, reject_reason)
+        VALUES (?, ?, ?, ?, 'pending', NULL)
+        ON DUPLICATE KEY UPDATE
+            documentidnumber = VALUES(documentidnumber),
+            photo            = IFNULL(VALUES(photo), photo),
+            status           = 'pending',
+            reject_reason    = NULL,
+            updated_at       = NOW()";
 
-if ($check->num_rows > 0) {
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("isss", $userid, $documenttype, $documentidnumber, $photoPath);
 
-    // UPDATE
-    $sql = "UPDATE user_documents SET 
-                documenttype = ?, 
-                documentidnumber = ?, 
-                photo = IFNULL(?, photo)
-            WHERE userid = ?";
-
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sssi", $documenttype, $documentidnumber, $photoPath, $userid);
-
-} else {
-
-    // INSERT
-    $sql = "INSERT INTO user_documents 
-            (userid, documenttype, documentidnumber, photo) 
-            VALUES (?, ?, ?, ?)";
-
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("isss", $userid, $documenttype, $documentidnumber, $photoPath);
-}
-
-// ---------------- EXECUTE ----------------
 if ($stmt->execute()) {
-
-    // ✅ UPDATE USER STATUS TO PENDING
-    $status = "pending";
-    $updateUser = $conn->prepare("UPDATE users SET status = ? WHERE id = ?");
-    $updateUser->bind_param("si", $status, $userid);
-    $updateUser->execute();
-
     echo json_encode([
-        "status" => "success",
-        "message" => "Document uploaded, status set to pending"
+        "status"  => "success",
+        "message" => "Document uploaded and set to pending review"
     ]);
-
 } else {
     echo json_encode(["status" => "error", "message" => "Database error"]);
 }

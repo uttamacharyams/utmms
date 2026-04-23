@@ -99,7 +99,7 @@ class _DocumentsPageState extends State<DocumentsPage>
     );
     if (confirmed != true) return;
     final ok = await provider.updateDocumentStatus(
-        userId: doc.userId, action: 'approve');
+        documentId: doc.documentId, action: 'approve');
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(ok
@@ -173,7 +173,7 @@ class _DocumentsPageState extends State<DocumentsPage>
   Future<void> _performReject(Document doc) async {
     final provider = context.read<DocumentsProvider>();
     final ok = await provider.updateDocumentStatus(
-      userId: doc.userId,
+      documentId: doc.documentId,
       action: 'reject',
       rejectReason: _rejectReasonController.text.trim(),
     );
@@ -636,6 +636,11 @@ class _DocumentsPageState extends State<DocumentsPage>
                   const SizedBox(height: 4),
                   _docDetailRow(Icons.numbers_outlined,
                       doc.documentIdNumber, Colors.teal),
+                  if (doc.rejectReason.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    _docDetailRow(Icons.info_outline,
+                        doc.rejectReason, _kRejected),
+                  ],
                 ],
               ),
             ),

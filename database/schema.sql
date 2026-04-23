@@ -518,22 +518,22 @@ CREATE TABLE IF NOT EXISTS user_documents (
     id               INT          UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     userid           INT UNSIGNED NOT NULL,
 
-    -- New schema columns
-    doc_type         VARCHAR(100) DEFAULT NULL,   -- e.g. "Aadhaar", "PAN", "Passport"
-    doc_url          VARCHAR(500) DEFAULT NULL,
+    -- Per-document status (not global – one row per document type per user)
     status           ENUM('not_uploaded','pending','approved','rejected') NOT NULL DEFAULT 'not_uploaded',
+    reject_reason    VARCHAR(500) DEFAULT NULL,
     reviewed_by      INT UNSIGNED DEFAULT NULL,
     reviewed_at      DATETIME     DEFAULT NULL,
 
-    -- Legacy API columns (used by upload_document.php)
-    documenttype     VARCHAR(100) DEFAULT NULL,
+    -- Document columns
+    documenttype     VARCHAR(100) NOT NULL,        -- e.g. "Death Certificate", "Divorce Decree"
     documentidnumber VARCHAR(100) DEFAULT NULL,
     photo            VARCHAR(500) DEFAULT NULL,
 
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    UNIQUE KEY uk_userid (userid),
+    -- One row per (user, document type); allows multiple document types per user
+    UNIQUE KEY uk_userid_doctype (userid, documenttype),
     FOREIGN KEY (userid) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

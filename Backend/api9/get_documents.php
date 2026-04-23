@@ -27,6 +27,7 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 
+    // Filter by per-document status (not global users.status)
     $stmt = $pdo->prepare("
         SELECT
             u.id AS user_id,
@@ -34,18 +35,18 @@ try {
             u.firstName,
             u.lastName,
             u.gender,
-            u.status,
             u.isVerified,
 
             d.id AS document_id,
             d.documenttype,
             d.documentidnumber,
-            d.photo
+            d.photo,
+            d.status,
+            d.reject_reason
 
         FROM users u
         INNER JOIN user_documents d ON d.userid = u.id
-        WHERE u.status = 'pending'
-        ORDER BY d.id DESC
+        ORDER BY d.updated_at DESC
     ");
 
     $stmt->execute();
@@ -60,7 +61,7 @@ try {
 
     echo json_encode([
         'success' => true,
-        'data' => $documents
+        'data'    => $documents
     ]);
 
 } catch (Exception $e) {
