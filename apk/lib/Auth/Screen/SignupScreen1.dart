@@ -690,7 +690,7 @@ super.dispose();
       builder: (context, model, child) {
         return Scaffold(
           backgroundColor: AppColors.background,
-          resizeToAvoidBottomInset: false,
+          resizeToAvoidBottomInset: true,
           body: SafeArea(
             child: RegistrationStepContainer(
                 scrollController: scrollController,

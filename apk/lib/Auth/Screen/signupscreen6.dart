@@ -371,7 +371,7 @@ class _EducationCareerPageState extends State<EducationCareerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       body: SafeArea(
         child: RegistrationStepContainer(
           onBack: () => Navigator.pop(context),
