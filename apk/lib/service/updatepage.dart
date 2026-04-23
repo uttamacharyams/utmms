@@ -11,13 +11,15 @@ class UpdateService {
     required int pageNo,
   }) async {
     try {
-      final uri = Uri.parse("$baseUrl/update_pageno.php");
-
-      final response = await http.post(
-        uri,
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-        body: jsonEncode({'user_id': userId, 'pageno': pageNo}),
+      // update_pageno.php reads from $_GET, so params must be in the query string
+      final uri = Uri.parse("$baseUrl/update_pageno.php").replace(
+        queryParameters: {
+          'user_id': userId,
+          'pageno': pageNo.toString(),
+        },
       );
+
+      final response = await http.get(uri);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
