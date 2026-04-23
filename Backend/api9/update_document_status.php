@@ -58,8 +58,7 @@ try {
             UPDATE user_documents
             SET
                 status        = 'approved',
-                reject_reason = NULL,
-                reviewed_at   = NOW()
+                reject_reason = NULL
             WHERE id = ?
         ");
         $stmt->execute([$documentId]);
@@ -87,8 +86,7 @@ try {
             UPDATE user_documents
             SET
                 status        = 'rejected',
-                reject_reason = ?,
-                reviewed_at   = NOW()
+                reject_reason = ?
             WHERE id = ?
         ");
         $stmt->execute([$rejectReason, $documentId]);
@@ -108,6 +106,7 @@ try {
     ]);
 
 } catch (Exception $e) {
+    error_log('[update_document_status] ' . $e->getMessage());
     http_response_code(500);
     echo json_encode([
         'success' => false,
