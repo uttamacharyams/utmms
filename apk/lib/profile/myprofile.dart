@@ -3037,58 +3037,89 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
         ),
       );
 
+      // Validate file size (max 10MB)
+      final bytes = await imageFile.readAsBytes();
+      final fileSizeInMB = bytes.length / (1024 * 1024);
+      if (fileSizeInMB > 10) {
+        throw 'File size too large. Maximum allowed size is 10MB.';
+      }
+
+      // Validate file format
+      final fileName = imageFile.name.toLowerCase();
+      if (!fileName.endsWith('.jpg') &&
+          !fileName.endsWith('.jpeg') &&
+          !fileName.endsWith('.png')) {
+        throw 'Invalid file format. Only JPG, JPEG, and PNG are allowed.';
+      }
+
       final uri = Uri.parse('${kApiBaseUrl}/Api2/profile_picture.php');
+      print('Uploading to: $uri');
+      print('User ID: $userId');
+      print('File name: ${imageFile.name}');
+      print('File size: ${fileSizeInMB.toStringAsFixed(2)} MB');
 
       final request = http.MultipartRequest('POST', uri)
         ..fields['userid'] = userId.toString();
 
-      // Use bytes-based upload on web; path-based on native
-      if (kIsWeb) {
-        final bytes = await imageFile.readAsBytes();
-        request.files.add(http.MultipartFile.fromBytes(
-          'profile_picture',
-          bytes,
-          filename: imageFile.name,
-        ));
-      } else {
-        request.files.add(await http.MultipartFile.fromPath(
-          'profile_picture',
-          imageFile.path,
-        ));
-      }
+      // Use bytes-based upload for both web and native for consistency
+      request.files.add(http.MultipartFile.fromBytes(
+        'profile_picture',
+        bytes,
+        filename: imageFile.name,
+      ));
 
+      print('Sending request...');
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
+      print('Response status code: ${response.statusCode}');
+      print('Response body: $responseBody');
+
       if (response.statusCode == 200) {
-        // Save new image path locally
-        final prefs = await SharedPreferences.getInstance();
-        final userData = jsonDecode(prefs.getString('user_data')!);
-        userData['profile_picture'] = 'uploads/profile_pictures/profilepicture_$userId.jpg';
-        prefs.setString('user_data', jsonEncode(userData));
+        // Parse response to check for success status
+        try {
+          final responseData = jsonDecode(responseBody);
+          if (responseData['status'] == 'success') {
+            // Save new image path locally
+            final prefs = await SharedPreferences.getInstance();
+            final userData = jsonDecode(prefs.getString('user_data')!);
+            userData['profile_picture'] = 'uploads/profile_pictures/profilepicture_$userId.jpg';
+            prefs.setString('user_data', jsonEncode(userData));
 
-        // Update timestamp to refresh image
-        setState(() {
-          _profilePictureTimestamp = DateTime.now().millisecondsSinceEpoch;
-        });
+            // Update timestamp to refresh image
+            setState(() {
+              _profilePictureTimestamp = DateTime.now().millisecondsSinceEpoch;
+            });
 
-        // Refresh profile data
-        await fetchProfileData();
+            // Refresh profile data
+            await fetchProfileData();
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile picture updated successfully'),
-            backgroundColor: Color(0xFFD32F2F),
-          ),
-        );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile picture updated successfully'),
+                backgroundColor: Color(0xFFD32F2F),
+              ),
+            );
+          } else {
+            // Server returned error in response
+            final errorMsg = responseData['message'] ?? 'Unknown error occurred';
+            throw 'Server error: $errorMsg';
+          }
+        } catch (jsonError) {
+          print('Error parsing response: $jsonError');
+          throw 'Invalid server response: $responseBody';
+        }
       } else {
-        throw responseBody;
+        // Non-200 status code
+        throw 'Server returned error ${response.statusCode}: $responseBody';
       }
     } catch (e) {
+      print('Upload error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Upload failed: $e'),
           backgroundColor: Colors.red,
+          duration: Duration(seconds: 5),
         ),
       );
     }
