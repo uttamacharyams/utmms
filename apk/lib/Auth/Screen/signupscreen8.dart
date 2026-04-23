@@ -519,11 +519,73 @@ class _LifestylePageState extends State<LifestylePage> {
 
       final response = await http.post(
         Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
         body: body,
       ).timeout(const Duration(seconds: 30));
 
-      final data = json.decode(response.body);
-      print("API Response: $data");
+      // Log full response details
+      print("HTTP Status: ${response.statusCode}");
+      print("Response headers: ${response.headers}");
+      final rawBody = response.body.trim();
+      print("Raw body (first 500 chars): ${rawBody.substring(0, rawBody.length.clamp(0, 500))}");
+
+      // Check HTTP status code
+      if (response.statusCode != 200) {
+        print("Non-200 status code: ${response.statusCode}");
+        _showError("Server error (${response.statusCode}). Please try again.");
+        return;
+      }
+
+      // Check if body is empty
+      if (rawBody.isEmpty) {
+        print("Empty response body received");
+        _showError("Server returned empty response. Please try again.");
+        return;
+      }
+
+      // Check if response looks like HTML (common error response format)
+      if (rawBody.startsWith('<') || rawBody.toLowerCase().contains('<!doctype') || rawBody.toLowerCase().contains('<html')) {
+        print("HTML response detected instead of JSON");
+        _showError("Server returned an error page. Please contact support.");
+        return;
+      }
+
+      // Attempt to extract JSON even if PHP warning/notice text is prepended
+      final jsonStart = rawBody.indexOf('{');
+      final jsonEnd = rawBody.lastIndexOf('}');
+
+      if (jsonStart == -1 || jsonEnd == -1 || jsonEnd <= jsonStart) {
+        print("No valid JSON object found in response");
+        _showError("Invalid server response format. Please try again.");
+        return;
+      }
+
+      final jsonCandidate = rawBody.substring(jsonStart, jsonEnd + 1);
+
+      if (jsonCandidate != rawBody) {
+        print("Non-JSON prefix detected. Extracted candidate: $jsonCandidate");
+      }
+
+      // Parse JSON with error handling
+      final dynamic data;
+      try {
+        data = json.decode(jsonCandidate);
+        print("API Response: $data");
+      } on FormatException catch (e) {
+        print("FormatException: $e");
+        print("JSON candidate that failed: $jsonCandidate");
+        _showError("Server returned invalid JSON. Please try again or contact support.");
+        return;
+      }
+
+      // Validate response is a Map
+      if (data is! Map<String, dynamic>) {
+        print("Unexpected response type: ${data.runtimeType}");
+        _showError("Unexpected response format. Please try again.");
+        return;
+      }
 
       if (data['status'] == 'success') {
         _showSuccess(data['message'] ?? "Lifestyle details saved successfully!");
