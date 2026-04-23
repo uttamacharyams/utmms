@@ -96,7 +96,7 @@ class DocumentsProvider with ChangeNotifier {
   }
 
   Future<bool> updateDocumentStatus({
-    required int userId,
+    required int documentId,
     required String action,
     String? rejectReason,
   }) async {
@@ -117,7 +117,7 @@ class DocumentsProvider with ChangeNotifier {
       final url = Uri.parse('${kAdminApiBaseUrl}/api9/update_document_status.php');
 
       final Map<String, dynamic> body = {
-        'user_id': userId,
+        'document_id': documentId,
         'action': action,
       };
 
@@ -141,7 +141,7 @@ class DocumentsProvider with ChangeNotifier {
 
         if (responseData['success'] == true) {
           // Update local document status
-          final index = _documents.indexWhere((doc) => doc.userId == userId);
+          final index = _documents.indexWhere((doc) => doc.documentId == documentId);
           if (index != -1) {
             final updatedDoc = Document(
               userId: _documents[index].userId,
@@ -150,6 +150,7 @@ class DocumentsProvider with ChangeNotifier {
               lastName: _documents[index].lastName,
               gender: _documents[index].gender,
               status: action == 'approve' ? 'approved' : 'rejected',
+              rejectReason: action == 'reject' ? (rejectReason ?? '') : '',
               isVerified: action == 'approve' ? 1 : 0,
               documentId: _documents[index].documentId,
               documentType: _documents[index].documentType,
