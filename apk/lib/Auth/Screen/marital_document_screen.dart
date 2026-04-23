@@ -1921,6 +1921,33 @@ class _MaritalDocumentUploadScreenState
   Future<void> _scanDocumentId() async {
     if (_selectedImage == null && _scannedImagePath == null) return;
     setState(() => _isScanning = true);
+
+    // Show scanning feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Scanning document number...'),
+            ],
+          ),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+
     try {
       // OCR only works on native (not web)
       if (!kIsWeb) {
@@ -1932,6 +1959,26 @@ class _MaritalDocumentUploadScreenState
         setState(() => _isScanning = false);
         if (extractedText != null && extractedText.isNotEmpty) {
           _showScanResultDialog(extractedText);
+        } else {
+          // Show feedback when nothing is found
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.white, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text('No document number detected. You can enter it manually below.'),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
+          }
         }
       } else {
         setState(() => _isScanning = false);

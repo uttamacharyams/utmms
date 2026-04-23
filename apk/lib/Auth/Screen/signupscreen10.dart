@@ -787,14 +787,14 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
   Widget _buildStepIndicator({required int currentStep}) {
     final steps = ['Select', 'Upload', 'Verified'];
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
@@ -805,10 +805,13 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
             final stepIdx = i ~/ 2;
             return Expanded(
               child: Container(
-                height: 2,
-                color: stepIdx <= currentStep
-                    ? AppColors.primary
-                    : const Color(0xFFE0E0E0),
+                height: 3,
+                decoration: BoxDecoration(
+                  color: stepIdx <= currentStep
+                      ? AppColors.primary
+                      : const Color(0xFFE0E0E0),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             );
           }
@@ -819,35 +822,44 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 32,
-                height: 32,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: isActive
                       ? AppColors.primary
                       : const Color(0xFFE0E0E0),
+                  boxShadow: isActive
+                      ? [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ]
+                      : [],
                 ),
                 child: Center(
                   child: isCompleted
-                      ? const Icon(Icons.check, color: Colors.white, size: 16)
+                      ? const Icon(Icons.check, color: Colors.white, size: 18)
                       : Text(
                           '${stepIdx + 1}',
                           style: TextStyle(
-                            color: isActive ? Colors.white : Colors.grey,
-                            fontSize: 13,
+                            color: isActive ? Colors.white : const Color(0xFF9E9E9E),
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(
                 steps[stepIdx],
                 style: TextStyle(
-                  fontSize: 11,
-                  color: isActive ? AppColors.primary : Colors.grey,
+                  fontSize: 12,
+                  color: isActive ? AppColors.primary : const Color(0xFF9E9E9E),
                   fontWeight:
-                      isActive ? FontWeight.w600 : FontWeight.normal,
+                      isActive ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),
             ],
@@ -2265,6 +2277,32 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
 
     setState(() => _isScanning = true);
 
+    // Show scanning feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('Scanning document number...'),
+            ],
+          ),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
+
     try {
       // OCR only works on native (not web)
       if (!kIsWeb) {
@@ -2275,6 +2313,26 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         setState(() => _isScanning = false);
         if (extractedText != null && extractedText.isNotEmpty) {
           _showScanResultDialog(extractedText);
+        } else {
+          // Show feedback when nothing is found
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.white, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text('No document number detected. You can enter it manually below.'),
+                    ),
+                  ],
+                ),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            );
+          }
         }
       } else {
         setState(() => _isScanning = false);
