@@ -59,6 +59,12 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
 
   /// Whether a marital document upload is in progress.
   bool _isUploadingMaritalDoc = false;
+
+  /// Whether the identity upload form is open (user pressed "Change").
+  bool _showIdentityUploadForm = false;
+
+  /// Document type label from the last known identity document (server or upload).
+  String? _identityDocType;
   // ─────────────────────────────────────────────────────────────────────────
 
   final List<Map<String, dynamic>> _documentTypes = [
@@ -128,6 +134,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
 
           String idStatus = 'not_uploaded';
           String idRejectReason = '';
+          String idDocType = '';
           final Map<String, Map<String, dynamic>> newMaritalStates = {};
 
           for (final doc in docs) {
@@ -153,6 +160,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
                   (statusPriority[idStatus] ?? 0)) {
                 idStatus = status;
                 idRejectReason = reason;
+                idDocType = type;
               }
             }
           }
@@ -160,6 +168,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
           setState(() {
             _documentStatus = idStatus;
             _rejectReason = idRejectReason;
+            if (idDocType.isNotEmpty) _identityDocType = idDocType;
             _maritalDocStates
               ..clear()
               ..addAll(newMaritalStates);
@@ -475,6 +484,8 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         setState(() {
           _documentStatus = 'pending';
           _rejectReason = '';
+          _identityDocType = _selectedDocumentType;
+          _showIdentityUploadForm = false;
         });
         _showSuccess("Document submitted! We'll notify you once it's verified.");
       } else {
@@ -528,123 +539,57 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
     );
   }
 
-  Widget _buildContent() {
-    switch (_documentStatus) {
-      case 'approved':
-        return _buildApprovedScreen();
-      case 'rejected':
-        return _buildRejectedScreen();
-      default:
-        // 'pending' and 'not_uploaded' both show the upload screen so the user
-        // can always upload all required documents, even while one is under review.
-        return _buildUploadScreen();
-    }
-  }
+  Widget _buildContent() => _buildKYCScreen();
 
-  // ─── UPLOAD SCREEN ────────────────────────────────────────────────────────
+  // ─── UNIFIED KYC SCREEN ──────────────────────────────────────────────────
 
-  Widget _buildUploadScreen() {
+  Widget _buildKYCScreen() {
     return Column(
-        children: [
-          _buildHeroHeader(
-            title: 'Verify Your Identity',
-            subtitle: 'Complete verification to unlock all features',
-            icon: Icons.verified_user_rounded,
-          ),
-          Expanded(
+      children: [
+        _buildHeroHeader(
+          title: 'KYC Verification',
+          subtitle: 'Complete verification to unlock all features',
+          icon: Icons.verified_user_rounded,
+        ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _checkDocumentStatus,
+            color: AppColors.primary,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStepIndicator(currentStep: _documentStatus == 'pending' ? 1 : 0),
-                  const SizedBox(height: 28),
-                  // ── Identity document status banner (when pending) ────────
-                  if (_documentStatus == 'pending') ...[
-                    _buildIdDocumentStatusBanner(),
-                    const SizedBox(height: 24),
-                  ],
-                  // ── Marital document requirements ───────────────────────
+                  // ── Identity Document Section ──
+                  _buildSectionTitle('1. Identity Document'),
+                  const SizedBox(height: 12),
+                  _buildIdentityDocSection(),
+
+                  // ── Marital Documents Section (if required) ──
                   if (_requiresMaritalDocuments()) ...[
-                    _buildMaritalDocumentsSection(),
                     const SizedBox(height: 28),
                     const Divider(thickness: 1, color: Color(0xFFEEEEEE)),
                     const SizedBox(height: 24),
+                    _buildMaritalDocumentsSection(),
                   ],
-                  // ── ID document section (only when not already submitted) ─
-                  if (_documentStatus != 'pending') ...[
-                    _buildSectionTitle('${_requiresMaritalDocuments() ? '2' : '1'}. Choose Identity Document'),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Tap a document type to upload',
-                      style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildDocumentTypeGrid(),
-                    if (_selectedDocumentType != null && (_selectedImage != null || _scannedImagePath != null)) ...[
-                      const SizedBox(height: 32),
-                      _buildSectionTitle('${_requiresMaritalDocuments() ? '3' : '2'}. Document Photo'),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Review and edit if needed',
-                        style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildImagePreview(),
-                      const SizedBox(height: 32),
-                      _buildSectionTitle('${_requiresMaritalDocuments() ? '4' : '3'}. Document Number'),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Enter your document identification number',
-                        style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDocumentNumberField(),
-                      const SizedBox(height: 24),
-                      _buildGuidelinesCard(),
-                      const SizedBox(height: 24),
-                      _buildConsentCard(),
-                      const SizedBox(height: 28),
-                      _buildSubmitButton(),
-                      const SizedBox(height: 16),
-                    ] else if (_selectedDocumentType != null) ...[
-                      const SizedBox(height: 24),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline_rounded,
-                                color: AppColors.primary, size: 20),
-                            const SizedBox(width: 12),
-                            const Expanded(
-                              child: Text(
-                                'Select scan or gallery option from the bottom sheet to continue',
-                                style: TextStyle(fontSize: 13, color: AppColors.primary, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                    ] else ...[
-                      const SizedBox(height: 24),
-                      _buildInfoBanner(),
-                      const SizedBox(height: 24),
-                    ],
+
+                  // ── Continue button (all required docs submitted) ──
+                  if (_canProceed()) ...[
+                    const SizedBox(height: 32),
+                    _buildContinueButton(),
                   ],
+
+                  const SizedBox(height: 12),
                   _buildSkipButton(),
                   const SizedBox(height: 32),
                 ],
               ),
             ),
           ),
-        ],
-      );
+        ),
+      ],
+    );
   }
 
   // ─── Marital documents section ────────────────────────────────────────────
@@ -654,10 +599,10 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle('1. Required Marital Documents'),
+        _buildSectionTitle('2. Marital Documents'),
         const SizedBox(height: 6),
         Text(
-          'Since your marital status is "$_maritalStatus", please upload the supporting document(s) below.',
+          'Since your marital status is "$_maritalStatus", upload all the documents listed below.',
           style: const TextStyle(
             fontSize: 13,
             color: Color(0xFF757575),
@@ -680,7 +625,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Upload at least one of the documents below to prove your current marital status. Tap a document tile to upload.',
+                  'Upload all the documents below to verify your marital status. Tap a document tile to upload.',
                   style: TextStyle(
                       fontSize: 12.5,
                       color: Color(0xFF795548),
@@ -981,91 +926,6 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
     );
   }
 
-  Widget _buildStepIndicator({required int currentStep}) {
-    final steps = ['Select', 'Upload', 'Verified'];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: List.generate(steps.length * 2 - 1, (i) {
-          if (i.isOdd) {
-            final stepIdx = i ~/ 2;
-            return Expanded(
-              child: Container(
-                height: 3,
-                decoration: BoxDecoration(
-                  color: stepIdx <= currentStep
-                      ? AppColors.primary
-                      : const Color(0xFFE0E0E0),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            );
-          }
-          final stepIdx = i ~/ 2;
-          final isActive = stepIdx <= currentStep;
-          final isCompleted = stepIdx < currentStep;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isActive
-                      ? AppColors.primary
-                      : const Color(0xFFE0E0E0),
-                  boxShadow: isActive
-                      ? [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: Center(
-                  child: isCompleted
-                      ? const Icon(Icons.check, color: Colors.white, size: 18)
-                      : Text(
-                          '${stepIdx + 1}',
-                          style: TextStyle(
-                            color: isActive ? Colors.white : const Color(0xFF9E9E9E),
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                steps[stepIdx],
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isActive ? AppColors.primary : const Color(0xFF9E9E9E),
-                  fontWeight:
-                      isActive ? FontWeight.w600 : FontWeight.w500,
-                ),
-              ),
-            ],
-          );
-        }),
-      ),
-    );
-  }
-
   Widget _buildSectionTitle(String title) {
     return Row(
       children: [
@@ -1241,86 +1101,6 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildPhotoUploadArea() {
-    if (_selectedImage != null || _scannedImagePath != null) return _buildImagePreview();
-    return GestureDetector(
-      onTap: _showImageSourceSelector,
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-              color: AppColors.primary.withOpacity(0.4), width: 2.5),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withOpacity(0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: AppColors.primaryGradient,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.35),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: const Icon(Icons.cloud_upload_rounded,
-                  color: Colors.white, size: 40),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'Upload Document Photo',
-              style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF212121)),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Tap here to scan or select from gallery',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Color(0xFF757575), height: 1.4)),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.document_scanner_rounded,
-                      color: AppColors.primary, size: 18),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Scan recommended',
-                    style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1573,60 +1353,6 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
     );
   }
 
-  Widget _buildIdDocumentStatusBanner() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFF57C00).withOpacity(0.4)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.hourglass_top_rounded,
-              color: Color(0xFFF57C00), size: 20),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Identity Document Under Review',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFF57C00),
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Your identity document is being verified. '
-                  'Upload any remaining required documents below.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF5D4037),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: _isCheckingStatus
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh_rounded, size: 18),
-            onPressed: _isCheckingStatus ? null : _checkDocumentStatus,
-            color: const Color(0xFFF57C00),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildInfoBanner() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1715,524 +1441,248 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
     );
   }
 
-  // ─── PENDING SCREEN ───────────────────────────────────────────────────────
+  // ─── IDENTITY DOCUMENT SECTION ───────────────────────────────────────────
 
-  Widget _buildPendingScreen() {
-    return Column(
+  /// Decides whether to show the upload form or a status card for the identity doc.
+  Widget _buildIdentityDocSection() {
+    final showForm = _documentStatus == 'not_uploaded' ||
+        _showIdentityUploadForm ||
+        _documentStatus == 'rejected';
+
+    if (showForm) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildStatusHeroHeader(
-            title: 'Under Review',
-            subtitle: 'Our team is verifying your document',
-            icon: Icons.hourglass_top_rounded,
-            color: const Color(0xFFF57C00),
+          // Rejection banner above form when doc was rejected
+          if (_documentStatus == 'rejected' && _rejectReason.isNotEmpty) ...[
+            _buildIdentityRejectionBanner(_rejectReason),
+            const SizedBox(height: 16),
+          ],
+          _buildSectionTitle('Select Document Type'),
+          const SizedBox(height: 4),
+          const Text(
+            'Tap a document type to upload',
+            style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
           ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  _buildStepIndicator(currentStep: 1),
-                  const SizedBox(height: 24),
-                  _buildVerificationTimeline(),
-                  const SizedBox(height: 16),
-                  _buildEstimatedTimeCard(),
-                  const SizedBox(height: 16),
-                  _buildAutoRefreshNote(),
-                  const SizedBox(height: 24),
-                  _buildRefreshButton(),
-                  const SizedBox(height: 12),
-                  _buildGoHomeButton(),
-                  const SizedBox(height: 28),
-                ],
+          const SizedBox(height: 16),
+          _buildDocumentTypeGrid(),
+          if (_selectedDocumentType != null &&
+              (_selectedImage != null || _scannedImagePath != null)) ...[
+            const SizedBox(height: 28),
+            _buildSectionTitle('Document Photo'),
+            const SizedBox(height: 4),
+            const Text(
+              'Review and edit if needed',
+              style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            _buildImagePreview(),
+            const SizedBox(height: 28),
+            _buildSectionTitle('Document Number'),
+            const SizedBox(height: 4),
+            const Text(
+              'Enter your document identification number',
+              style: TextStyle(fontSize: 13, color: Color(0xFF757575), height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            _buildDocumentNumberField(),
+            const SizedBox(height: 24),
+            _buildGuidelinesCard(),
+            const SizedBox(height: 24),
+            _buildConsentCard(),
+            const SizedBox(height: 28),
+            _buildSubmitButton(),
+          ] else ...[
+            const SizedBox(height: 16),
+            _buildInfoBanner(),
+          ],
+          // Cancel button when user is changing an already-uploaded doc
+          if (_showIdentityUploadForm && _documentStatus != 'not_uploaded') ...[
+            const SizedBox(height: 16),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  _showIdentityUploadForm = false;
+                  _selectedDocumentType = null;
+                  _selectedImage = null;
+                  _scannedImagePath = null;
+                  _hasConsented = false;
+                  _documentNumberController.clear();
+                }),
+                icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                label: const Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.grey),
+                ),
               ),
             ),
-          ),
+          ],
         ],
       );
+    }
+
+    // Status card view (pending or approved)
+    switch (_documentStatus) {
+      case 'approved':
+        return _buildIdentityApprovedCard();
+      case 'pending':
+        return _buildIdentityPendingCard();
+      default:
+        return _buildInfoBanner();
+    }
   }
 
-  Widget _buildStatusHeroHeader({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
+  void _startIdentityChange() {
+    setState(() {
+      _showIdentityUploadForm = true;
+      _selectedDocumentType = null;
+      _selectedImage = null;
+      _scannedImagePath = null;
+      _hasConsented = false;
+      _documentNumberController.clear();
+    });
+  }
+
+  Widget _buildIdentityApprovedCard() {
     return Container(
       width: double.infinity,
-      color: color,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.arrow_back_ios_new,
-                      color: Colors.white, size: 20),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 48),
-                ),
-              const SizedBox(height: 14),
-              Text(
-                title,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              Text(subtitle,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 14)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVerificationTimeline() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildTimelineItem(
-            icon: Icons.cloud_upload_outlined,
-            title: 'Document Submitted',
-            subtitle: 'Your document has been received',
-            isCompleted: true,
-            isActive: false,
-          ),
-          _buildTimelineDivider(filled: true),
-          _buildTimelineItem(
-            icon: Icons.manage_search_rounded,
-            title: 'Under Review',
-            subtitle: 'Admin is verifying your document',
-            isCompleted: false,
-            isActive: true,
-          ),
-          _buildTimelineDivider(filled: false),
-          _buildTimelineItem(
-            icon: Icons.verified_rounded,
-            title: 'Verification Complete',
-            subtitle: "You'll be notified when done",
-            isCompleted: false,
-            isActive: false,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTimelineItem({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool isCompleted,
-    required bool isActive,
-  }) {
-    final color = isCompleted
-        ? AppColors.success
-        : isActive
-            ? const Color(0xFFF57C00)
-            : const Color(0xFFBDBDBD);
-
-    return Row(
-      children: [
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.12),
-            shape: BoxShape.circle,
-            border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-          ),
-          child: Center(
-            child: isCompleted
-                ? Icon(Icons.check_rounded, color: color, size: 22)
-                : isActive
-                    ? Icon(icon, color: color, size: 22)
-                    : Icon(icon, color: color, size: 22),
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: isActive
-                      ? const Color(0xFFF57C00)
-                      : const Color(0xFF212121),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(subtitle,
-                  style:
-                      const TextStyle(fontSize: 12, color: Colors.grey)),
-            ],
-          ),
-        ),
-        if (isActive)
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF3E0),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Text(
-              'In Progress',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFFF57C00)),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildTimelineDivider({required bool filled}) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 21),
-      child: Container(
-        width: 2,
-        height: 22,
-        color: filled
-            ? AppColors.success.withOpacity(0.4)
-            : Colors.grey.withOpacity(0.3),
-      ),
-    );
-  }
-
-  Widget _buildEstimatedTimeCard() {
-    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFF8E1),
-        borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: const Color(0xFFFFCC02).withOpacity(0.4)),
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFF2E7D32).withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF57C00).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
+              color: const Color(0xFF2E7D32).withOpacity(0.1),
+              shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.schedule_rounded,
-                color: Color(0xFFF57C00), size: 22),
+            child: const Icon(Icons.verified_user_rounded,
+                color: Color(0xFF2E7D32), size: 26),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Estimated Verification Time',
-                  style: TextStyle(
-                      fontSize: 13,
+                  _identityDocType ?? 'Identity Document',
+                  style: const TextStyle(
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF424242)),
+                      color: Color(0xFF212121)),
                 ),
-                SizedBox(height: 3),
-                Text(
-                  '24-48 hours on business days',
-                  style:
-                      TextStyle(fontSize: 12, color: Color(0xFF757575)),
+                const SizedBox(height: 6),
+                const Row(
+                  children: [
+                    Icon(Icons.verified_rounded,
+                        color: Color(0xFF2E7D32), size: 16),
+                    SizedBox(width: 6),
+                    Text('Verified',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF2E7D32))),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          _buildChangeButton(),
         ],
       ),
     );
   }
 
-  Widget _buildAutoRefreshNote() {
+  Widget _buildIdentityPendingCard() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE0E0E0)),
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFF57C00).withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(Icons.sync_rounded, size: 16, color: Colors.grey),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'Status is checked when you return to the app.',
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRefreshButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _isCheckingStatus ? null : _checkDocumentStatus,
-        icon: _isCheckingStatus
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor:
-                        AlwaysStoppedAnimation(AppColors.primary)),
-              )
-            : const Icon(Icons.refresh_rounded, size: 20),
-        label: const Text('Check Status Now'),
-        style: OutlinedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          side: const BorderSide(color: AppColors.primary),
-          foregroundColor: AppColors.primary,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGoHomeButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _goToHome,
-        icon: const Icon(Icons.home_rounded, size: 20),
-        label: const Text('Go to Home'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14)),
-          elevation: 3,
-          shadowColor: AppColors.primary.withOpacity(0.4),
-        ),
-      ),
-    );
-  }
-
-  // ─── APPROVED SCREEN ──────────────────────────────────────────────────────
-
-  Widget _buildApprovedScreen() {
-    return Column(
-        children: [
-          _buildStatusHeroHeader(
-            title: 'Verified! 🎉',
-            subtitle: 'Your identity has been confirmed',
-            icon: Icons.verified_rounded,
-            color: const Color(0xFF2E7D32),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  _buildStepIndicator(currentStep: 2),
-                  const SizedBox(height: 24),
-                  _buildApprovedCard(),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _completeRegistration,
-                      icon: const Icon(Icons.arrow_forward_rounded,
-                          size: 20),
-                      label: const Text('Continue to App'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2E7D32),
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 4,
-                        shadowColor:
-                            const Color(0xFF2E7D32).withOpacity(0.4),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-  }
-
-  Widget _buildApprovedCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: Color(0xFFE8F5E9),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF57C00).withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.verified_user_rounded,
-                color: Color(0xFF2E7D32), size: 52),
+            child: const Icon(Icons.badge_outlined,
+                color: Color(0xFFF57C00), size: 26),
           ),
-          const SizedBox(height: 16),
-          const Text(
-            'Identity Verified',
-            style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF212121)),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'You now have full access to all features including chatting and connecting with your matches.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                fontSize: 14, color: Color(0xFF757575), height: 1.5),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: const Color(0xFFE8F5E9),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.check_circle_rounded,
-                    color: Color(0xFF2E7D32), size: 22),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Your profile is now fully verified',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF2E7D32)),
-                  ),
+                Text(
+                  _identityDocType ?? 'Identity Document',
+                  style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF212121)),
+                ),
+                const SizedBox(height: 6),
+                const Row(
+                  children: [
+                    Icon(Icons.hourglass_top_rounded,
+                        color: Color(0xFFF57C00), size: 16),
+                    SizedBox(width: 6),
+                    Text('Under Review',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFF57C00))),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: _isCheckingStatus
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded, size: 20),
+            onPressed: _isCheckingStatus ? null : _checkDocumentStatus,
+            color: const Color(0xFFF57C00),
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Refresh status',
+          ),
+          _buildChangeButton(),
         ],
       ),
     );
   }
 
-  // ─── REJECTED SCREEN ──────────────────────────────────────────────────────
-
-  Widget _buildRejectedScreen() {
-    return Column(
-        children: [
-          _buildStatusHeroHeader(
-            title: 'Document Rejected',
-            subtitle: 'Please upload a new valid document',
-            icon: Icons.cancel_rounded,
-            color: const Color(0xFFC62828),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  _buildStepIndicator(currentStep: 0),
-                  const SizedBox(height: 24),
-                  if (_rejectReason.isNotEmpty) ...[
-                    _buildRejectionReasonCard(),
-                    const SizedBox(height: 16),
-                  ],
-                  _buildRejectionTipsCard(),
-                  const SizedBox(height: 28),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        setState(() {
-                          _documentStatus = 'not_uploaded';
-                          _selectedDocumentType = null;
-                          _documentNumberController.clear();
-                          _selectedImage = null;
-                          _scannedImagePath = null;
-                          _hasConsented = false;
-                          _rejectReason = '';
-                        });
-                      },
-                      icon: const Icon(Icons.upload_rounded, size: 20),
-                      label: const Text('Upload New Document'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        elevation: 4,
-                        shadowColor: AppColors.primary.withOpacity(0.4),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  _buildSkipButton(),
-                  const SizedBox(height: 28),
-                ],
-              ),
-            ),
-          ),
-        ],
-      );
-  }
-
-  Widget _buildRejectionReasonCard() {
+  Widget _buildIdentityRejectionBanner(String reason) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF5F5),
         borderRadius: BorderRadius.circular(14),
@@ -2243,11 +1693,10 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         children: [
           const Row(
             children: [
-              Icon(Icons.info_rounded,
-                  color: Color(0xFFC62828), size: 20),
+              Icon(Icons.cancel_rounded, color: Color(0xFFC62828), size: 18),
               SizedBox(width: 8),
               Text(
-                'Rejection Reason',
+                'Identity Document Rejected',
                 style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
@@ -2255,52 +1704,89 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            _rejectReason,
-            style: const TextStyle(
-                fontSize: 14, color: Color(0xFF424242), height: 1.5),
-          ),
+          const SizedBox(height: 8),
+          Text(reason,
+              style: const TextStyle(
+                  fontSize: 13, color: Color(0xFF424242), height: 1.5)),
         ],
       ),
     );
   }
 
-  Widget _buildRejectionTipsCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F7FF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFBBDEFB)),
+  Widget _buildChangeButton() {
+    return GestureDetector(
+      onTap: _startIdentityChange,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.edit_outlined, color: AppColors.primary, size: 16),
+            const SizedBox(width: 6),
+            Text(
+              'Change',
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary),
+            ),
+          ],
+        ),
       ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.tips_and_updates_rounded,
-                  color: Color(0xFF1565C0), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'How to Fix',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1565C0)),
-              ),
-            ],
-          ),
-          SizedBox(height: 10),
-          Text(
-            '- Make sure the document is not expired\n'
-            '- All text and details must be clearly readable\n'
-            '- Photo must show all four corners of the document\n'
-            '- Avoid dark, blurry, or glare-affected photos',
-            style: TextStyle(
-                fontSize: 13, color: Color(0xFF424242), height: 1.7),
-          ),
-        ],
+    );
+  }
+
+  // ─── CONTINUE BUTTON ──────────────────────────────────────────────────────
+
+  /// Returns true when all required documents have been at least submitted
+  /// (identity status != 'not_uploaded' and all marital docs != 'not_uploaded').
+  bool _canProceed() {
+    if (_documentStatus == 'not_uploaded') return false;
+    if (!_requiresMaritalDocuments()) return true;
+    final requiredDocs = _getRequiredMaritalDocuments();
+    return requiredDocs.every((doc) {
+      final label = doc['label'] as String;
+      final state = _maritalDocStates[label];
+      return state != null && state['status'] != 'not_uploaded';
+    });
+  }
+
+  Widget _buildContinueButton() {
+    final allApproved = _documentStatus == 'approved' &&
+        (!_requiresMaritalDocuments() ||
+            _getRequiredMaritalDocuments().every((doc) {
+              final state = _maritalDocStates[doc['label'] as String];
+              return state?['status'] == 'approved';
+            }));
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: allApproved ? _completeRegistration : _goToHome,
+        icon: Icon(
+            allApproved
+                ? Icons.check_circle_rounded
+                : Icons.home_rounded,
+            size: 20),
+        label: Text(allApproved ? 'Continue to App' : 'Go to Home'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              allApproved ? const Color(0xFF2E7D32) : AppColors.primary,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          elevation: 4,
+          shadowColor: (allApproved
+                  ? const Color(0xFF2E7D32)
+                  : AppColors.primary)
+              .withOpacity(0.4),
+        ),
       ),
     );
   }
