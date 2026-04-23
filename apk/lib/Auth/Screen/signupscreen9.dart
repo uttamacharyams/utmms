@@ -973,6 +973,9 @@ class _PartnerPreferencesPageState extends State<PartnerPreferencesPage> {
     required List<String> options,
     required ValueChanged<String?> onChanged,
   }) {
+    // Validate that selectedItem exists in options to prevent DropdownButton error
+    final String? validatedValue = (selectedItem != null && options.contains(selectedItem)) ? selectedItem : null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1009,7 +1012,7 @@ class _PartnerPreferencesPageState extends State<PartnerPreferencesPage> {
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    value: selectedItem,
+                    value: validatedValue,
                     isExpanded: true,
                     hint: const Text(
                       'Select an option',
