@@ -141,9 +141,16 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
                 'reject_reason': reason,
               };
             } else {
-              // Identity document: prefer approved > pending/rejected > not_uploaded
-              if (idStatus == 'not_uploaded' ||
-                  (status == 'approved' && idStatus != 'approved')) {
+              // Identity document: pick the highest-priority status seen so far.
+              // Priority order: approved (3) > rejected (2) > pending (1) > not_uploaded (0)
+              const statusPriority = {
+                'approved': 3,
+                'rejected': 2,
+                'pending': 1,
+                'not_uploaded': 0,
+              };
+              if ((statusPriority[status] ?? 0) >
+                  (statusPriority[idStatus] ?? 0)) {
                 idStatus = status;
                 idRejectReason = reason;
               }
