@@ -135,7 +135,7 @@ class _MaritalDocumentUploadScreenState
           {'label': 'Separation Document', 'icon': Icons.assignment_outlined},
         ];
       default:
-        return _allDocumentTypes;
+        return [];
     }
   }
 
@@ -285,6 +285,55 @@ class _MaritalDocumentUploadScreenState
 
   Widget _buildDocumentListScreen() {
     final requiredDocs = _getRequiredDocTypes();
+    if (requiredDocs.isEmpty) {
+      return Column(
+        children: [
+          _buildHeroHeader(
+            title: 'Marital Status Verification',
+            subtitle: 'Upload the required documents for verification',
+            icon: Icons.family_restroom_rounded,
+            showBack: true,
+            onBack: () => Navigator.pop(context),
+          ),
+          Expanded(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.check_circle_outline_rounded,
+                          color: AppColors.primary, size: 48),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'No Documents Required',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF212121)),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Your current marital status does not require any supporting documents.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                          fontSize: 14, color: Color(0xFF757575), height: 1.5),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       children: [
         _buildHeroHeader(
